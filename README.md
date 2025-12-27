@@ -1,5 +1,5 @@
 # Moved to https://codeberg.org/LDprg/volantes-cursors
-# Not closed so the pr to the original might get merged
+# Not archived so the PR to the original might get merged
 
 # Volantes Cursors
 
