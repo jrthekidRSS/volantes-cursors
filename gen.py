@@ -234,4 +234,3 @@ for arg in sys.argv[1:]:
         exit()
 
 create_cursors("volantes_cursors", hypr)
-create_cursors("volantes_light_cursors", hypr)

@@ -9,7 +9,5 @@ def rm_exist(path):
 
 
 rm_exist("/usr/share/icons/volantes_cursors/")
-rm_exist("/usr/share/icons/volantes_light_cursors/")
 
 os.system("cp -r ./build/volantes_cursors/ /usr/share/icons/")
-os.system("cp -r ./build/volantes_light_cursors/ /usr/share/icons/")
