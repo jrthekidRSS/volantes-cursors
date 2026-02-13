@@ -13,9 +13,10 @@ readonly SCRIPT_NAME="$(basename "$0")"
 readonly SCRIPT_DIR="$(dirname "$0")"
 readonly SRC_DIR="$(dirname -- "$0")/src"
 readonly INTERMEDIATE_DIR="/tmp/$USER_ID-$OUTPUT_NAME"
+readonly DISPLAY_NAME="Volantes Cursors"
 
 read -r -d '' HYPRCURSORS_MANIFEST_CONTENTS <<- EOF
-name = Volantes Cursors
+name = $DISPLAY_NAME
 description = Design by varlesh
 cursors_directory = hyprcursors
 EOF
@@ -63,28 +64,37 @@ gen-hyprcursors() {
 
         [[ "$cursor_name" =~ -[[:digit:]]{2}$ ]] && cursor_name="${cursor_name::-3}"
 
-        declare -A sizes
-        local output_contents
-        read -r nan1 hotspot_x hotspot_y nan2 < "$SRC_DIR/config/$cursor_name.cursor"
+        local output_contents= hotspot_x= hotspot_y= overrides_contents=
+        read -r _ hotspot_x hotspot_y _ < "$SRC_DIR/config/$cursor_name.cursor"
 
         # Read cursor's config file
         while IFS= read -r line; do
-            read -r size nan nan output_filename animation
+            read -r size nan nan xcursor_filename animation <<< "$line"
 
             [[ -n "$size" ]] || continue
 
-            meta_hl_line="$(printf "$META_HL_LINE_FORMAT" "$size" "$svg_file")"
+            # Animated cursors are made up of files with slightly different
+            # names between each other
+            local cursor_file="$svg_file"
+            #IFS='_' read -r cursor_frame _ <<< "$xcursor_filename"
+            cursor_frame="${xcursor_filename//_[0-9][0-9]/}"
+            cursor_frame="${cursor_frame/.png/}"
+
+            if [[ "$cursor_frame" != "$cursor_name" ]]; then
+                cursor_file="${cursor_frame}.svg"
+            fi
+
+            meta_hl_line="$(printf "$META_HL_LINE_FORMAT" "$size" "$cursor_file")"
 
             if [[ -n "$animation" ]]; then
                 meta_hl_line="${meta_hl_line}, $animation"
             fi
 
-            output_contents="${output_contents}${meta_hl_line}
-"
-
+            # `${IFS:2:1}` is '\n'
+            output_contents="${output_contents}${meta_hl_line}${IFS:2:1}"
         done < "$SRC_DIR/config/$cursor_name.cursor"
-        local overrides_contents
-        while read -r override nan; do
+
+        while read -r override _; do
             if [[ -n "$override" ]]; then
                 overrides_contents="${overrides_contents}$(printf "\n${META_HL_OVERRIDES_FORMAT}" "$override")"
             fi
@@ -96,9 +106,12 @@ gen-hyprcursors() {
         local meta_hl_contents="$(printf "$META_HL_FORMAT" "$hotspot_x" "$hotspot_y" "$output_contents" "$overrides_contents" )"
         mkdir -p "$cursors_output/$cursor_name" 2>/dev/null
         echo -n "$meta_hl_contents" > "$cursors_output/$cursor_name/meta.hl"
+        cp "$SRC_DIR/volantes_cursors/$cursor_name"* "$cursors_output/$cursor_name"
     done
 
-    sleep 10
+    mkdir -p "$INTERMEDIATE_DIR/build"
+    hyprcursor-util --create "$INTERMEDIATE_DIR" --output "$INTERMEDIATE_DIR/build" 1>/dev/null
+    sleep 1000
     exit 0
 }
 
