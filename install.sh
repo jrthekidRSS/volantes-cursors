@@ -12,11 +12,12 @@ readonly OUTPUT_NAME="volantes_cursors"
 readonly SCRIPT_NAME="$(basename "$0")"
 readonly SCRIPT_DIR="$(dirname "$0")"
 readonly SRC_DIR="$(dirname -- "$0")/src"
-readonly INTERMEDIATE_DIR="/tmp/$USER_ID-$OUTPUT_NAME"
-readonly DISPLAY_NAME="Volantes Cursors"
+readonly WORKING_DIR="/tmp/$USER_ID-$OUTPUT_NAME"
+readonly WORKING_SRC_DIR="$WORKING_DIR/src"
+readonly OUTPUT_DISPLAY_NAME="Volantes Cursors"
 
 read -r -d '' HYPRCURSORS_MANIFEST_CONTENTS <<- EOF
-name = $DISPLAY_NAME
+name = $OUTPUT_DISPLAY_NAME
 description = Design by varlesh
 cursors_directory = hyprcursors
 EOF
@@ -29,7 +30,7 @@ hotspot_y = %s
 %s
 EOF
 
-read -r -d '' META_HL_LINE_FORMAT <<- EOF
+read -r -d '' META_HL_SIZE_FORMAT <<- EOF
 define_size = %s, %s
 EOF
 
@@ -38,7 +39,7 @@ define_override = %s
 EOF
 
 cleanup() {
-    rm -r "$INTERMEDIATE_DIR" 2>/dev/null
+    rm -r "$WORKING_DIR" 2>/dev/null
 }
 
 print-help() {
@@ -49,10 +50,10 @@ EOF
 
 gen-hyprcursors() {
     set -e
-    readarray -t svg_files < <(ls -m1 "$SRC_DIR/volantes_cursors")
-    printf '%s' "$HYPRCURSORS_MANIFEST_CONTENTS" > "$INTERMEDIATE_DIR/manifest.hl"
+    readarray -t svg_files < <(ls -m1 "$WORKING_SRC_DIR/volantes_cursors")
+    printf '%s' "$HYPRCURSORS_MANIFEST_CONTENTS" > "$WORKING_DIR/manifest.hl"
     set +e
-    local cursors_output="$INTERMEDIATE_DIR/hyprcursors"
+    local cursors_output="$WORKING_DIR/hyprcursors"
     mkdir "$cursors_output"
 
     for svg_file in "${svg_files[@]}"; do
@@ -60,45 +61,54 @@ gen-hyprcursors() {
             continue
         fi
 
+        # Trim '.svg' off of end
         local cursor_name="${svg_file::-4}"
 
-        [[ "$cursor_name" =~ -[[:digit:]]{2}$ ]] && cursor_name="${cursor_name::-3}"
+        if [[ "$cursor_name" =~ -[[:digit:]]{2} ]]; then
+            # Skip parsing extra frames of animations
+            [[ "$cursor_name" == *"-01"* ]] || continue
+
+            # Trim '-01' off of end for animations
+            cursor_name="${cursor_name::-3}"
+        fi
 
         local output_contents= hotspot_x= hotspot_y= overrides_contents=
-        read -r _ hotspot_x hotspot_y _ < "$SRC_DIR/config/$cursor_name.cursor"
+        read -r _ hotspot_x hotspot_y _ < "$WORKING_SRC_DIR/config/$cursor_name.cursor"
 
         # Read cursor's config file
         while IFS= read -r line; do
-            read -r size nan nan xcursor_filename animation <<< "$line"
+            read -r size _ _ xcursor_filename animation <<< "$line"
 
-            [[ -n "$size" ]] || continue
+            if [[ -z "$size" ]] || (( $size > 32 )); then
+                continue
+            fi
 
             # Animated cursors are made up of files with slightly different
             # names between each other
             local cursor_file="$svg_file"
-            #IFS='_' read -r cursor_frame _ <<< "$xcursor_filename"
-            cursor_frame="${xcursor_filename//_[0-9][0-9]/}"
-            cursor_frame="${cursor_frame/.png/}"
+            cursor_frame="${xcursor_filename/_[0-9][0-9].png/}"
 
             if [[ "$cursor_frame" != "$cursor_name" ]]; then
                 cursor_file="${cursor_frame}.svg"
             fi
 
-            meta_hl_line="$(printf "$META_HL_LINE_FORMAT" "$size" "$cursor_file")"
+            # define_size = SIZE, IMAGE
+            meta_hl_size="$(printf "$META_HL_SIZE_FORMAT" "$size" "$cursor_file")"
 
+            # Animation field of define_size if it exists
             if [[ -n "$animation" ]]; then
-                meta_hl_line="${meta_hl_line}, $animation"
+                meta_hl_size="${meta_hl_size}, $animation"
             fi
 
             # `${IFS:2:1}` is '\n'
-            output_contents="${output_contents}${meta_hl_line}${IFS:2:1}"
-        done < "$SRC_DIR/config/$cursor_name.cursor"
+            output_contents="${output_contents}${meta_hl_size}${IFS:2:1}"
+        done < "$WORKING_SRC_DIR/config/$cursor_name.cursor"
 
         while read -r override _; do
             if [[ -n "$override" ]]; then
                 overrides_contents="${overrides_contents}$(printf "\n${META_HL_OVERRIDES_FORMAT}" "$override")"
             fi
-        done < <(grep --color=never "$cursor_name$" "$SRC_DIR/cursorList" 2>/dev/null)
+        done < <(grep --color=never "$cursor_name$" "$WORKING_SRC_DIR/cursorList" 2>/dev/null)
 
         hotspot_x="0$(bc <<< "scale=16; $hotspot_x / 32")"
         hotspot_y="0$(bc <<< "scale=16; $hotspot_y / 32")"
@@ -106,11 +116,13 @@ gen-hyprcursors() {
         local meta_hl_contents="$(printf "$META_HL_FORMAT" "$hotspot_x" "$hotspot_y" "$output_contents" "$overrides_contents" )"
         mkdir -p "$cursors_output/$cursor_name" 2>/dev/null
         echo -n "$meta_hl_contents" > "$cursors_output/$cursor_name/meta.hl"
-        cp "$SRC_DIR/volantes_cursors/$cursor_name"* "$cursors_output/$cursor_name"
+        (GLOBIGNORE="*_24*"; cp "$WORKING_SRC_DIR/volantes_cursors/$cursor_name"* "$cursors_output/$cursor_name")
     done
 
-    mkdir -p "$INTERMEDIATE_DIR/build"
-    hyprcursor-util --create "$INTERMEDIATE_DIR" --output "$INTERMEDIATE_DIR/build" 1>/dev/null
+    set -e
+    hyprcursor-util --create "$WORKING_DIR" --output "$WORKING_DIR/build" 1>/dev/null
+    mv "$WORKING_DIR/build/theme_$OUTPUT_DISPLAY_NAME/"* "$WORKING_DIR/build"
+    rmdir "$WORKING_DIR/build/theme_$OUTPUT_DISPLAY_NAME"
     sleep 1000
     exit 0
 }
@@ -160,10 +172,16 @@ done
 
 trap cleanup EXIT
 
-if [[ -d "$INTERMEDIATE_DIR" ]]; then
-    [[ "$INTERMEDIATE" != '/' ]] && rm -r "$INTERMEDIATE_DIR"/*
+set -e
+
+if [[ -d "$WORKING_DIR" ]]; then
+    ([[ "$WORKING_DIR" != '/' ]] && rm -r "$WORKING_DIR"/*) || \
+        (echo "error: no, I will not 'rm' recursively on root" 1>&2 || exit 4)
 else
-    mkdir "$INTERMEDIATE_DIR"
+    mkdir "$WORKING_DIR" 
 fi
+
+mkdir "$WORKING_DIR/build"
+cp -rd "$SRC_DIR" "$WORKING_DIR"
 
 gen-hyprcursors
