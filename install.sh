@@ -41,9 +41,15 @@ Usage: $SCRIPT_NAME [-ch]
 EOF
 }
 
+install-cursors() {
+    set -e
+
+    cp -rdT "$WORKING_DIR/build" "$OUTPUT_DIR/$OUTPUT_NAME"
+}
+
 build-cursors() {
     set -e
-    readarray -t svg_files < <(ls -m1 "$WORKING_SRC_DIR/volantes_cursors")
+    readarray -t svg_files < <(ls -m1 "$WORKING_SRC_DIR/$OUTPUT_NAME")
     # cursors_items format: CURSOR_NAME:FRAMES:OVERRIDES
     # FRAME format: HOTSPOT_X,HOTSPOT_Y,SIZE,FILENAME,[DELAY]
     # FRAMES format: FRAME;FRAME;FRAME;[...]
@@ -108,8 +114,6 @@ build-cursors() {
     gen-hyprcursors "${cursor_items[@]}" &
     gen-xcursors "${cursor_items[@]}" &
     wait
-
-    sleep 1000
 }
 
 gen-hyprcursors() {
@@ -140,7 +144,7 @@ gen-hyprcursors() {
                 local meta_hl_frame="define_size = ${size}, ${filename}"
                 [[ -n "$delay" ]] && meta_hl_frame="${meta_hl_frame}, ${delay}"
 
-                ln -s "$WORKING_SRC_DIR/volantes_cursors/$filename" "$cursors_output/$cursor_name/$filename"
+                ln -s "$WORKING_SRC_DIR/$OUTPUT_NAME/$filename" "$cursors_output/$cursor_name/$filename"
                 meta_hl_contents+=("$meta_hl_frame")
             done <<< "$cursor_frame"
         done
@@ -201,7 +205,7 @@ gen-xcursors() {
                     metadata_json_contents+=($'\t}')
                 fi
 
-                cp "$WORKING_SRC_DIR/volantes_cursors/$filename" "$svgcursors_output/$cursor_name/$filename"
+                cp "$WORKING_SRC_DIR/$OUTPUT_NAME/$filename" "$svgcursors_output/$cursor_name/$filename"
             done <<< "${cursor_frames[cursor_frame_index]}"
         done
 
@@ -283,3 +287,4 @@ mkdir "$WORKING_DIR/build"
 cp -rd "$SRC_DIR" "$WORKING_DIR"
 
 build-cursors
+install-cursors
