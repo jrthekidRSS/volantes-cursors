@@ -9,8 +9,7 @@ else
 fi
 
 readonly OUTPUT_NAME="volantes_cursors"
-readonly SCRIPT_NAME="$(basename "$0")"
-readonly SCRIPT_DIR="$(dirname "$0")"
+readonly SCRIPT_NAME="$(basename "$0")" readonly SCRIPT_DIR="$(dirname "$0")"
 readonly SRC_DIR="$(dirname -- "$0")/src"
 readonly WORKING_DIR="/tmp/$USER_ID-$OUTPUT_NAME"
 readonly WORKING_SRC_DIR="$WORKING_DIR/src"
@@ -31,6 +30,20 @@ Name=$OUTPUT_DISPLAY_NAME
 Comment=$OUTPUT_DESCRIPTION
 EOF
 
+read -r -d '' JQ_FORMAT <<- "EOF"
+"\(.color.cursor_fg)
+\(.color.cursor_bg)
+\(.color.teal)
+\(.color.red)
+\(.color.green)
+\(.color.rosewater)
+\(.color.sapphire)
+\(.color.lavender)
+\(.color.mauve)
+\(.color.peach)
+\(.color.blue)"
+EOF
+
 cleanup() {
     rm -r "$WORKING_DIR" 2>/dev/null
 }
@@ -38,7 +51,62 @@ cleanup() {
 print-help() {
 cat <<- EOF
 Usage: $SCRIPT_NAME [-ch]
+
+Options:
+    -h, --help              Show this help
+    -c, --cached-theme      Location of injected .json file
 EOF
+}
+
+inject-colors() {
+    local jq_output
+    set -e
+    jq_output="$(jq -r "$JQ_FORMAT" "$CACHED_THEME_FILE" 2>/dev/null)"
+    set +e
+
+    IFS=$'\n' read -r -d '' cursor_fg cursor_bg teal red \
+    green rosewater sapphire lavender mauve peach blue  \
+    <<< "$jq_output"
+
+    if [[ -z "$blue" ]]; then
+        echo "error: failed to find needed colors in theme cache" 1>&2
+        return 2
+    fi
+
+    if [[ "$jq_output" == "$(cat "$OUTPUT_DIR/$OUTPUT_NAME/theme.json" 2>/dev/null)" ]]; then
+        echo "warning: '$OUTPUT_NAME' is already installed" 1>&2
+        return 1
+    fi
+
+    shopt -u nullglob
+
+    sed -i "s/#232627/#%cursor_fg%/g" "$WORKING_SRC_DIR/$OUTPUT_NAME"/*
+    sed -i "s/#efefef/#%cursor_bg%/g" "$WORKING_SRC_DIR/$OUTPUT_NAME"/*
+    sed -i "s/#d728d7/#%mauve%/g" "$WORKING_SRC_DIR/$OUTPUT_NAME"/'alias'*
+    sed -i "s/#ff8a15/#%peach%/g" "$WORKING_SRC_DIR/$OUTPUT_NAME"/context-menu*
+    sed -i "s/#47a400/#%green%/g" "$WORKING_SRC_DIR/$OUTPUT_NAME"/copy*
+    sed -i "s/#435ece/#%sapphire%/g" "$WORKING_SRC_DIR/$OUTPUT_NAME"/dnd-ask*
+    sed -i "s/#7753c5/#%lavender%/g" "$WORKING_SRC_DIR/$OUTPUT_NAME"/dnd-link*
+    sed -i "s/#ef326f/#%red%/g" "$WORKING_SRC_DIR/$OUTPUT_NAME"/dnd-no-drop*
+    sed -i "s/#3d5cdb/#%blue%/g" "$WORKING_SRC_DIR/$OUTPUT_NAME"/'help'*
+    sed -i "s/#ff1a1a/#%red%/g" "$WORKING_SRC_DIR/$OUTPUT_NAME"/pirate*
+    sed -i "s/#ff8a15/#%peach%/g" "$WORKING_SRC_DIR/$OUTPUT_NAME"/wayland-cursor*
+    sed -i "s/#00aea9/#%teal%/g" "$WORKING_SRC_DIR/$OUTPUT_NAME"/{progress*,'wait'*}
+    sed -i "s/#ab6439/#%rosewater%/g" "$WORKING_SRC_DIR/$OUTPUT_NAME"/x-cursor*
+
+    sed -i "s/%cursor_fg%/$cursor_fg/g" "$WORKING_SRC_DIR/$OUTPUT_NAME"/*
+    sed -i "s/%cursor_bg%/$cursor_bg/g" "$WORKING_SRC_DIR/$OUTPUT_NAME"/*
+    sed -i "s/%mauve%/$mauve/g" "$WORKING_SRC_DIR/$OUTPUT_NAME"/'alias'*
+    sed -i "s/%peach%/$peach/g" "$WORKING_SRC_DIR/$OUTPUT_NAME"/context-menu*
+    sed -i "s/%green%/$green/g" "$WORKING_SRC_DIR/$OUTPUT_NAME"/copy*
+    sed -i "s/%sapphire%/$sapphire/g" "$WORKING_SRC_DIR/$OUTPUT_NAME"/dnd-ask*
+    sed -i "s/%lavender%/$lavender/g" "$WORKING_SRC_DIR/$OUTPUT_NAME"/dnd-link*
+    sed -i "s/%red%/$red/g" "$WORKING_SRC_DIR/$OUTPUT_NAME"/dnd-no-drop*
+    sed -i "s/%blue%/$blue/g" "$WORKING_SRC_DIR/$OUTPUT_NAME"/'help'*
+    sed -i "s/%red%/$red/g" "$WORKING_SRC_DIR/$OUTPUT_NAME"/pirate*
+    sed -i "s/%peach%/$peach/g" "$WORKING_SRC_DIR/$OUTPUT_NAME"/wayland-cursor*
+    sed -i "s/%teal%/$teal/g" "$WORKING_SRC_DIR/$OUTPUT_NAME"/{progress*,'wait'*}
+    sed -i "s/%rosewater%/$rosewater/g" "$WORKING_SRC_DIR/$OUTPUT_NAME"/x-cursor*
 }
 
 install-cursors() {
@@ -231,6 +299,8 @@ gen-xcursors() {
             ln -s "$target" "$xcursors_output/$link_name"
         fi
     done
+
+    mv "$WORKING_SRC_DIR/$OUTPUT_NAME/cursor.theme" "$WORKING_DIR/build"
 }
 
 parse-flags() {
@@ -247,6 +317,9 @@ parse-flags() {
                 print-help
                 exit 0
                 ;;
+            c)
+                CACHED_THEME_FILE="$value"
+                ;;
             *)
                 printf "error: invalid parameter '-%s'\n%s\n" \
                 "$arg" "$(print-help)" 1>&2
@@ -261,6 +334,10 @@ while (( $# > 0 )); do
     case "$1" in
         --help)
             parse-flags '-h'
+            ;;
+        --cached-theme)
+            parse-flags '-c' "$2"
+            shift
             ;;
         -*)
             parse-flags "$1" "$2"
@@ -286,5 +363,8 @@ fi
 mkdir "$WORKING_DIR/build"
 cp -rd "$SRC_DIR" "$WORKING_DIR"
 
+inject-colors || :
 build-cursors
 install-cursors
+
+sleep 1000
