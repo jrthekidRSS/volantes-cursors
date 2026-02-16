@@ -3,9 +3,9 @@
 readonly USER_ID="$(id -u)"
 
 if [[ "$USER_ID" == 0 ]]; then
-    readonly OUTPUT_DIR="/usr/share/icons"
+    OUTPUT_DIR="/usr/share/icons"
 else
-    readonly OUTPUT_DIR="$HOME/.local/share/icons"
+    OUTPUT_DIR="$HOME/.local/share/icons"
 fi
 
 readonly OUTPUT_NAME="volantes_cursors"
@@ -55,6 +55,7 @@ Usage: $SCRIPT_NAME [-ch]
 Options:
     -h, --help              Show this help
     -c, --cached-theme      Location of injected .json file
+    -d, --target-directory  Location of theme's target directory
 EOF
 }
 
@@ -146,7 +147,7 @@ build-cursors() {
             local hotspot_x= hotspot_y=
             read -r size hotspot_x hotspot_y xcursor_filename delay <<< "$line"
 
-            if [[ -z "$size" ]] || (( $size > 32 )); then
+            if [[ -z "$size" ]] || (( "$size" > 32 )); then
                 continue
             fi
 
@@ -320,6 +321,9 @@ parse-flags() {
             c)
                 CACHED_THEME_FILE="$value"
                 ;;
+            d)
+                OUTPUT_DIR="$value"
+                ;;
             *)
                 printf "error: invalid parameter '-%s'\n%s\n" \
                 "$arg" "$(print-help)" 1>&2
@@ -339,11 +343,26 @@ while (( $# > 0 )); do
             parse-flags '-c' "$2"
             shift
             ;;
+        --target-directory)
+            parse-flags '-d' "$2"
+            shift
+            ;;
+        --*)
+            printf "error: invalid parameter '%s'\n%s\n" "$1" "$(print-help)" 1>&2
+            exit 2
+            ;;
         -*)
             parse-flags "$1" "$2"
+
+            case "$1" in
+                *c*|*d*)
+                    shift
+                    ;;
+            esac
             ;;
         *)
             printf "error: invalid parameter '%s'\n%s\n" "$1" "$(print-help)" 1>&2
+            exit 2
     esac
 
     shift
@@ -366,5 +385,3 @@ cp -rd "$SRC_DIR" "$WORKING_DIR"
 inject-colors || :
 build-cursors
 install-cursors
-
-sleep 1000
