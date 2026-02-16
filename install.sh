@@ -14,28 +14,21 @@ readonly SCRIPT_DIR="$(dirname "$0")"
 readonly SRC_DIR="$(dirname -- "$0")/src"
 readonly WORKING_DIR="/tmp/$USER_ID-$OUTPUT_NAME"
 readonly WORKING_SRC_DIR="$WORKING_DIR/src"
+readonly WORKING_CURSORS_DIR="$WORKING_DIR/cursors"
 readonly OUTPUT_DISPLAY_NAME="Volantes Cursors"
+readonly OUTPUT_DESCRIPTION="Design by varlesh"
+readonly DEFAULT_CURSOR_SIZE=32
 
 read -r -d '' HYPRCURSORS_MANIFEST_CONTENTS <<- EOF
 name = $OUTPUT_DISPLAY_NAME
-description = Design by varlesh
+description = $OUTPUT_DESCRIPTION
 cursors_directory = hyprcursors
 EOF
 
-read -r -d '' META_HL_FORMAT <<- EOF
-hotspot_x = %s
-hotspot_y = %s
-
-%s
-%s
-EOF
-
-read -r -d '' META_HL_SIZE_FORMAT <<- EOF
-define_size = %s, %s
-EOF
-
-read -r -d '' META_HL_OVERRIDES_FORMAT <<- EOF
-define_override = %s
+read -r -d '' XCURSOR_INDEX_CONTENTS <<- EOF
+[Icon Theme]
+Name=$OUTPUT_DISPLAY_NAME
+Comment=$OUTPUT_DESCRIPTION
 EOF
 
 cleanup() {
@@ -48,13 +41,14 @@ Usage: $SCRIPT_NAME [-ch]
 EOF
 }
 
-gen-hyprcursors() {
+build-cursors() {
     set -e
     readarray -t svg_files < <(ls -m1 "$WORKING_SRC_DIR/volantes_cursors")
-    printf '%s' "$HYPRCURSORS_MANIFEST_CONTENTS" > "$WORKING_DIR/manifest.hl"
-    set +e
-    local cursors_output="$WORKING_DIR/hyprcursors"
-    mkdir "$cursors_output"
+    mkdir "$WORKING_CURSORS_DIR"
+    # cursors_items format: CURSOR_NAME:FRAMES:OVERRIDES
+    # FRAME format: HOTSPOT_X,HOTSPOT_Y,SIZE,FILENAME,[DELAY]
+    # FRAMES format: FRAME;FRAME;FRAME;[...]
+    local cursor_items=()
 
     for svg_file in "${svg_files[@]}"; do
         if [[ "$svg_file" != *.svg ]] || [[ "$svg_file" == *_24.svg ]]; then
@@ -72,12 +66,12 @@ gen-hyprcursors() {
             cursor_name="${cursor_name::-3}"
         fi
 
-        local output_contents= hotspot_x= hotspot_y= overrides_contents=
-        read -r _ hotspot_x hotspot_y _ < "$WORKING_SRC_DIR/config/$cursor_name.cursor"
+        local cursor_frames=() cursor_overrides=()
 
         # Read cursor's config file
         while IFS= read -r line; do
-            read -r size _ _ xcursor_filename animation <<< "$line"
+            local hotspot_x= hotspot_y=
+            read -r size hotspot_x hotspot_y xcursor_filename delay <<< "$line"
 
             if [[ -z "$size" ]] || (( $size > 32 )); then
                 continue
@@ -91,42 +85,94 @@ gen-hyprcursors() {
             if [[ "$cursor_frame" != "$cursor_name" ]]; then
                 cursor_file="${cursor_frame}.svg"
             fi
+            
+            local cursor_frame_item="${hotspot_x},${hotspot_y},${size},${cursor_file}"
 
-            # define_size = SIZE, IMAGE
-            meta_hl_size="$(printf "$META_HL_SIZE_FORMAT" "$size" "$cursor_file")"
-
-            # Animation field of define_size if it exists
-            if [[ -n "$animation" ]]; then
-                meta_hl_size="${meta_hl_size}, $animation"
+            if [[ -n "$delay" ]]; then
+                cursor_frame_item="${cursor_frame_item},${delay}"
             fi
 
-            # `${IFS:2:1}` is '\n'
-            output_contents="${output_contents}${meta_hl_size}${IFS:2:1}"
+            cursor_frames+=("$cursor_frame_item")
         done < "$WORKING_SRC_DIR/config/$cursor_name.cursor"
 
-        while read -r override _; do
-            if [[ -n "$override" ]]; then
-                overrides_contents="${overrides_contents}$(printf "\n${META_HL_OVERRIDES_FORMAT}" "$override")"
+        while read -r cursor_override _; do
+            if [[ -n "$cursor_override" ]]; then
+                cursor_overrides+=("$cursor_override")
             fi
-        done < <(grep --color=never "$cursor_name$" "$WORKING_SRC_DIR/cursorList" 2>/dev/null)
+        done < <(grep --color=never "${cursor_name}$" "$WORKING_SRC_DIR/cursorList" 2>/dev/null)
 
-        hotspot_x="0$(bc <<< "scale=16; $hotspot_x / 32")"
-        hotspot_y="0$(bc <<< "scale=16; $hotspot_y / 32")"
+        mkdir -p "$WORKING_CURSORS_DIR/$cursor_name" 2>/dev/null
+        cp "$WORKING_SRC_DIR/volantes_cursors/$cursor_name"* "$WORKING_CURSORS_DIR/$cursor_name"
 
-        local meta_hl_contents="$(printf "$META_HL_FORMAT" "$hotspot_x" "$hotspot_y" "$output_contents" "$overrides_contents" )"
-        mkdir -p "$cursors_output/$cursor_name" 2>/dev/null
-        echo -n "$meta_hl_contents" > "$cursors_output/$cursor_name/meta.hl"
-        (GLOBIGNORE="*_24*"; cp "$WORKING_SRC_DIR/volantes_cursors/$cursor_name"* "$cursors_output/$cursor_name")
+        IFS=';'
+        cursor_items+=("$cursor_name:${cursor_frames[*]}:${cursor_overrides[*]}")
+        unset IFS
     done
 
-    set -e
+    #(IFS=$'\n'; echo "${cursor_items[*]}")
+
+    gen-hyprcursors "${cursor_items[@]}" &
+    gen-svgcursors "${cursor_items[@]}" &
+    wait
+}
+
+gen-hyprcursors() {
+    set -eo pipefail
+    echo -n "$HYPRCURSORS_MANIFEST_CONTENTS" > "$WORKING_DIR/manifest.hl"
+    local cursors_output="$WORKING_DIR/hyprcursors"
+    mkdir "$cursors_output"
+    
+    for cursor in "$@"; do
+        local cursor_name= cursor_frames= cursor_overrides= meta_hl_contents=()
+
+        IFS=':' read -r cursor_name cursor_frames cursor_overrides <<< "$cursor"
+
+        mkdir "$cursors_output/$cursor_name"
+
+        readarray -t -d ';' cursor_frames <<< "$cursor_frames"
+        readarray -t -d ';' cursor_overrides <<< "$cursor_overrides"
+
+        for cursor_frame in "${cursor_frames[@]}"; do
+            while IFS=',' read -r hotspot_x hotspot_y size filename delay; do
+                [[ -n "$filename" ]] || continue
+
+                if [[ -z "${meta_hl_contents[*]}" ]]; then
+                    meta_hl_contents+=("$(printf "hotspot_x = 0%s\nhotspot_y = 0%s" "$(bc <<< "scale=16; $hotspot_x / $size")" \
+                        "$(bc <<< "scale=16; $hotspot_y / $size")")" '')
+                fi
+
+                local meta_hl_frame="define_size = ${size}, ${filename}"
+                [[ -n "$delay" ]] && meta_hl_frame="${meta_hl_frame}, ${delay}"
+
+                ln -s "$WORKING_CURSORS_DIR/$cursor_name/$filename" "$cursors_output/$cursor_name/$filename"
+                meta_hl_contents+=("$meta_hl_frame")
+            done <<< "$cursor_frame"
+        done
+
+        meta_hl_contents+=('')
+
+        for cursor_override in "${cursor_overrides[@]}"; do
+            # WHY DOES A LINE BREAK MAGICALLY APPEAR?????
+            [[ -n "${cursor_override::-1}" ]] || continue
+
+            meta_hl_contents+=("define_override = $cursor_override")
+        done
+
+        (IFS=$'\n'; printf '%s' "${meta_hl_contents[*]}" > "$cursors_output/$cursor_name/meta.hl")
+    done
+
+    #sleep 1000
+
+    #return 0
     hyprcursor-util --create "$WORKING_DIR" --output "$WORKING_DIR/build" 1>/dev/null
     mv "$WORKING_DIR/build/theme_$OUTPUT_DISPLAY_NAME/"* "$WORKING_DIR/build"
     rmdir "$WORKING_DIR/build/theme_$OUTPUT_DISPLAY_NAME"
-    sleep 1000
     exit 0
 }
 
+gen-svgcursors() {
+    printf '%s' "$XCURSOR_INDEX_CONTENTS" > "$WORKING_DIR/index.theme"
+}
 gen-xcursors() {
     echo
 }
@@ -184,4 +230,6 @@ fi
 mkdir "$WORKING_DIR/build"
 cp -rd "$SRC_DIR" "$WORKING_DIR"
 
-gen-hyprcursors
+build-cursors
+
+sleep 1000
