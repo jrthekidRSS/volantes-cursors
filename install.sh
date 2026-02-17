@@ -204,6 +204,8 @@ gen-hyprcursors() {
         for cursor_frame in "${cursor_frames[@]}"; do
             while IFS=',' read -r hotspot_x hotspot_y size filename delay; do
                 [[ -n "$filename" ]] || continue
+                # The cursor will be animated otherwise
+                [[ "$size" != 24 ]] || continue
 
                 if [[ -z "${meta_hl_contents[*]}" ]]; then
                     meta_hl_contents+=("$(printf "hotspot_x = 0%s\nhotspot_y = 0%s" "$(bc <<< "scale=16; $hotspot_x / $size")" \
