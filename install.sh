@@ -17,6 +17,22 @@ readonly OUTPUT_DISPLAY_NAME="Volantes Cursors"
 readonly OUTPUT_DESCRIPTION="Design by varlesh"
 readonly DEFAULT_CURSOR_SIZE=32
 readonly DOUBLE_TAB=$'\t\t'
+readonly CURSOR_COLORS=(
+    "232627:cursor_fg:"
+    "efefef:cursor_bg:"
+    "d728d7:mauve:alias"
+    "ff8a15:peach:context-menu"
+    "47a400:green:copy"
+    "435ece:sapphire:dnd-ask"
+    "7753c5:lavender:dnd-link"
+    "ef326f:red:dnd-no-drop"
+    "3d5cdb:blue:help"
+    "ff1a1a:red:pirate"
+    "ff8a15:peach:wayland-cursor"
+    "00aea9:teal:progress"
+    "00aea9:teal:wait"
+    "ab6439:rosewater:x-cursor"
+)
 
 read -r -d '' HYPRCURSORS_MANIFEST_CONTENTS <<- EOF
 name = $OUTPUT_DISPLAY_NAME
@@ -44,6 +60,22 @@ read -r -d '' JQ_FORMAT <<- "EOF"
 \(.color.blue)"
 EOF
 
+read -r -d '' THEME_JSON_FORMAT <<- EOF
+{
+    "cursor_fg": "%s",
+    "cursor_bg": "%s",
+    "teal": "%s",
+    "red": "%s",
+    "green": "%s",
+    "rosewater": "%s",
+    "sapphire": "%s",
+    "lavender": "%s",
+    "mauve": "%s",
+    "peach": "%s",
+    "blue": "%s"
+}
+EOF
+
 cleanup() {
     rm -r "$WORKING_DIR" 2>/dev/null
 }
@@ -69,45 +101,37 @@ inject-colors() {
     green rosewater sapphire lavender mauve peach blue  \
     <<< "$jq_output"
 
-    if [[ -z "$blue" ]]; then
-        echo "error: failed to find needed colors in theme cache" 1>&2
-        return 2
-    fi
+    local json_output="$(printf "$THEME_JSON_FORMAT" "${cursor_fg:-null}" "${cursor_bg:-null}" \
+    "${teal:-null}" "${red:-null}" "${green:-null}" "${rosewater:-null}" "${sapphire:-null}" "${lavender:-null}" "${mauve:-null}" "${peach:-null}" "${blue:-null}")"
 
-    if [[ "$jq_output" == "$(cat "$OUTPUT_DIR/$OUTPUT_NAME/theme.json" 2>/dev/null)" ]]; then
+    if [[ "$json_output" == "$(cat "$OUTPUT_DIR/$OUTPUT_NAME/theme.json" 2>/dev/null)" ]]; then
         echo "warning: '$OUTPUT_NAME' is already installed" 1>&2
-        return 1
+        exit 0
     fi
 
     shopt -u nullglob
 
-    sed -i "s/#232627/#%cursor_fg%/g" "$WORKING_SRC_DIR/$OUTPUT_NAME"/*
-    sed -i "s/#efefef/#%cursor_bg%/g" "$WORKING_SRC_DIR/$OUTPUT_NAME"/*
-    sed -i "s/#d728d7/#%mauve%/g" "$WORKING_SRC_DIR/$OUTPUT_NAME"/'alias'*
-    sed -i "s/#ff8a15/#%peach%/g" "$WORKING_SRC_DIR/$OUTPUT_NAME"/context-menu*
-    sed -i "s/#47a400/#%green%/g" "$WORKING_SRC_DIR/$OUTPUT_NAME"/copy*
-    sed -i "s/#435ece/#%sapphire%/g" "$WORKING_SRC_DIR/$OUTPUT_NAME"/dnd-ask*
-    sed -i "s/#7753c5/#%lavender%/g" "$WORKING_SRC_DIR/$OUTPUT_NAME"/dnd-link*
-    sed -i "s/#ef326f/#%red%/g" "$WORKING_SRC_DIR/$OUTPUT_NAME"/dnd-no-drop*
-    sed -i "s/#3d5cdb/#%blue%/g" "$WORKING_SRC_DIR/$OUTPUT_NAME"/'help'*
-    sed -i "s/#ff1a1a/#%red%/g" "$WORKING_SRC_DIR/$OUTPUT_NAME"/pirate*
-    sed -i "s/#ff8a15/#%peach%/g" "$WORKING_SRC_DIR/$OUTPUT_NAME"/wayland-cursor*
-    sed -i "s/#00aea9/#%teal%/g" "$WORKING_SRC_DIR/$OUTPUT_NAME"/{progress*,'wait'*}
-    sed -i "s/#ab6439/#%rosewater%/g" "$WORKING_SRC_DIR/$OUTPUT_NAME"/x-cursor*
+    for line in "${CURSOR_COLORS[@]}"; do
+        IFS=: read -r color_code color_name cursor_name <<< "$line"
 
-    sed -i "s/%cursor_fg%/$cursor_fg/g" "$WORKING_SRC_DIR/$OUTPUT_NAME"/*
-    sed -i "s/%cursor_bg%/$cursor_bg/g" "$WORKING_SRC_DIR/$OUTPUT_NAME"/*
-    sed -i "s/%mauve%/$mauve/g" "$WORKING_SRC_DIR/$OUTPUT_NAME"/'alias'*
-    sed -i "s/%peach%/$peach/g" "$WORKING_SRC_DIR/$OUTPUT_NAME"/context-menu*
-    sed -i "s/%green%/$green/g" "$WORKING_SRC_DIR/$OUTPUT_NAME"/copy*
-    sed -i "s/%sapphire%/$sapphire/g" "$WORKING_SRC_DIR/$OUTPUT_NAME"/dnd-ask*
-    sed -i "s/%lavender%/$lavender/g" "$WORKING_SRC_DIR/$OUTPUT_NAME"/dnd-link*
-    sed -i "s/%red%/$red/g" "$WORKING_SRC_DIR/$OUTPUT_NAME"/dnd-no-drop*
-    sed -i "s/%blue%/$blue/g" "$WORKING_SRC_DIR/$OUTPUT_NAME"/'help'*
-    sed -i "s/%red%/$red/g" "$WORKING_SRC_DIR/$OUTPUT_NAME"/pirate*
-    sed -i "s/%peach%/$peach/g" "$WORKING_SRC_DIR/$OUTPUT_NAME"/wayland-cursor*
-    sed -i "s/%teal%/$teal/g" "$WORKING_SRC_DIR/$OUTPUT_NAME"/{progress*,'wait'*}
-    sed -i "s/%rosewater%/$rosewater/g" "$WORKING_SRC_DIR/$OUTPUT_NAME"/x-cursor*
+        if [[ -z "${!color_name}" ]] || [[ "${!color_name}" == null ]]; then
+            continue
+        fi
+
+        sed -i "s/#$color_code/#%$color_name%/g" "$WORKING_SRC_DIR/$OUTPUT_NAME"/"$cursor_name"*
+    done
+
+    for line in "${CURSOR_COLORS[@]}"; do
+        IFS=: read -r color_code color_name cursor_name <<< "$line"
+
+        if [[ -z "${!color_name}" ]] || [[ "${!color_name}" == null ]]; then
+            continue
+        fi
+
+        sed -i "s/%${color_name}%/${!color_name}/g" "$WORKING_SRC_DIR/$OUTPUT_NAME"/"$cursor_name"*
+    done
+
+    echo "$json_output" > "$OUTPUT_DIR/$OUTPUT_NAME/theme.json"
 }
 
 install-cursors() {
