@@ -12,7 +12,7 @@ readonly OUTPUT_NAME="volantes_cursors"
 readonly SCRIPT_NAME="$(basename "$0")" readonly SCRIPT_DIR="$(dirname "$0")"
 readonly SRC_DIR="$(dirname -- "$0")/src"
 readonly WORKING_DIR="/tmp/$USER_ID-$OUTPUT_NAME"
-readonly WORKING_SRC_DIR="$WORKING_DIR/src"
+readonly WORKING_CURSORS_DIR="$WORKING_DIR/cursors"
 readonly OUTPUT_DISPLAY_NAME="Volantes Cursors"
 readonly OUTPUT_DESCRIPTION="Design by varlesh"
 readonly DEFAULT_CURSOR_SIZE=32
@@ -118,7 +118,7 @@ inject-colors() {
             continue
         fi
 
-        sed -i "s/#$color_code/#%$color_name%/g" "$WORKING_SRC_DIR/$OUTPUT_NAME"/"$cursor_name"*
+        sed -i "s/#$color_code/#%$color_name%/g" "$WORKING_CURSORS_DIR"/"$cursor_name"*
     done
 
     for line in "${CURSOR_COLORS[@]}"; do
@@ -128,9 +128,10 @@ inject-colors() {
             continue
         fi
 
-        sed -i "s/%${color_name}%/${!color_name}/g" "$WORKING_SRC_DIR/$OUTPUT_NAME"/"$cursor_name"*
+        sed -i "s/%${color_name}%/${!color_name}/g" "$WORKING_CURSORS_DIR"/"$cursor_name"*
     done
 
+    [[ ! -d "$OUTPUT_DIR/$OUTPUT_NAME" ]] || mkdir -p "$OUTPUT_DIR/$OUTPUT_NAME"
     echo "$json_output" > "$OUTPUT_DIR/$OUTPUT_NAME/theme.json"
 }
 
@@ -142,7 +143,7 @@ install-cursors() {
 
 build-cursors() {
     set -e
-    readarray -t svg_files < <(ls -m1 "$WORKING_SRC_DIR/$OUTPUT_NAME")
+    readarray -t svg_files < <(ls -m1 "$WORKING_CURSORS_DIR")
     # cursors_items format: CURSOR_NAME:FRAMES:OVERRIDES
     # FRAME format: HOTSPOT_X,HOTSPOT_Y,SIZE,FILENAME,[DELAY]
     # FRAMES format: FRAME;FRAME;FRAME;[...]
@@ -171,7 +172,7 @@ build-cursors() {
             local hotspot_x= hotspot_y=
             read -r size hotspot_x hotspot_y xcursor_filename delay <<< "$line"
 
-            if [[ -z "$size" ]] || (( "$size" > 32 )); then
+            if [[ "$size" != 32 ]]; then
                 continue
             fi
 
@@ -191,13 +192,13 @@ build-cursors() {
             fi
 
             cursor_frames+=("$cursor_frame_item")
-        done < "$WORKING_SRC_DIR/config/$cursor_name.cursor"
+        done < "$SRC_DIR/config/$cursor_name.cursor"
 
         while read -r cursor_override _; do
             if [[ -n "$cursor_override" ]]; then
                 cursor_overrides+=("$cursor_override")
             fi
-        done < <(grep --color=never "${cursor_name}$" "$WORKING_SRC_DIR/cursorList" 2>/dev/null)
+        done < <(grep --color=never "${cursor_name}$" "$SRC_DIR/cursorList" 2>/dev/null)
 
         IFS=';'
         cursor_items+=("$cursor_name:${cursor_frames[*]}:${cursor_overrides[*]}")
@@ -239,7 +240,7 @@ gen-hyprcursors() {
                 local meta_hl_frame="define_size = ${size}, ${filename}"
                 [[ -n "$delay" ]] && meta_hl_frame="${meta_hl_frame}, ${delay}"
 
-                ln -s "$WORKING_SRC_DIR/$OUTPUT_NAME/$filename" "$cursors_output/$cursor_name/$filename"
+                ln -s "$WORKING_CURSORS_DIR/$filename" "$cursors_output/$cursor_name/$filename"
                 meta_hl_contents+=("$meta_hl_frame")
             done <<< "$cursor_frame"
         done
@@ -300,7 +301,7 @@ gen-xcursors() {
                     metadata_json_contents+=($'\t}')
                 fi
 
-                cp "$WORKING_SRC_DIR/$OUTPUT_NAME/$filename" "$svgcursors_output/$cursor_name/$filename"
+                cp "$WORKING_CURSORS_DIR/$filename" "$svgcursors_output/$cursor_name/$filename"
             done <<< "${cursor_frames[cursor_frame_index]}"
         done
 
@@ -317,7 +318,7 @@ gen-xcursors() {
     done
 
     kcursorgen --svg-theme-to-xcursor --svg-dir "$svgcursors_output" \
-    --xcursor-dir "$xcursors_output" --sizes '24,32' --scales '1,2' 2>/dev/null
+    --xcursor-dir "$xcursors_output" --sizes '24,32' --scales '1,2,3' 2>/dev/null
 
     for override in "${overrides[@]}"; do
         IFS=':' read -r target link_name <<< "$override"
@@ -327,7 +328,7 @@ gen-xcursors() {
         fi
     done
 
-    mv "$WORKING_SRC_DIR/$OUTPUT_NAME/cursor.theme" "$WORKING_DIR/build"
+    cp "$SRC_DIR/volantes_cursors/cursor.theme" "$WORKING_DIR/build"
 }
 
 parse-flags() {
@@ -405,8 +406,10 @@ else
     mkdir "$WORKING_DIR" 
 fi
 
-mkdir "$WORKING_DIR/build"
-cp -rd "$SRC_DIR" "$WORKING_DIR"
+mkdir "$WORKING_DIR/build" "$WORKING_CURSORS_DIR"
+shopt -s extglob nullglob
+cp -d -t "$WORKING_CURSORS_DIR" "$SRC_DIR/volantes_cursors"/!(*_24.svg|*.theme)
+shopt -u extglob nullglob
 
 inject-colors || :
 build-cursors
