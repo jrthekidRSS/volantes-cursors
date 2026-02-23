@@ -131,8 +131,7 @@ inject-colors() {
         sed -i "s/%${color_name}%/${!color_name}/g" "$WORKING_CURSORS_DIR"/"$cursor_name"*
     done
 
-    [[ ! -d "$OUTPUT_DIR/$OUTPUT_NAME" ]] || mkdir -p "$OUTPUT_DIR/$OUTPUT_NAME"
-    echo "$json_output" > "$OUTPUT_DIR/$OUTPUT_NAME/theme.json"
+    echo "$json_output" > "$WORKING_DIR/build/theme.json"
 }
 
 install-cursors() {
