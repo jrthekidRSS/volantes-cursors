@@ -26,29 +26,24 @@ bottom_right_corner size_fdiag
 bottom_tee
 c7088f0f3e6c8088236ef8e1e3e70000 bd_double_arrow
 cell crosshair
-center_ptr default
 circle not-allowed
 closedhand dnd-move
 col-resize size_hor
 color-picker crosshair
-context-menu default
 copy dnd-move
 cross crosshair
 cross_reverse cross
 crossed_circle not-allowed
-crosshair default
 d9ce0ab605698f320427677b458ad60b help
 diamond_cross cross
 dnd-ask
 dnd-copy copy
 dnd-link
-dnd-move default
 dnd-no-drop not-allowed
 dnd-none dnd-move
 dot_box_mask dotbox
 dotbox
 double_arrow sb_v_double_arrow
-down-arrow default
 draft pencil
 draft_large right_ptr
 draft_small right_ptr
@@ -59,7 +54,6 @@ ew-resize size_hor
 fcf1c3c7cd4491d801f1e1c78f100000 fd_double_arrow
 fcf21c00b30f7e3f83fe0dfd12e71cff dnd-move
 fd_double_arrow size_bdiag
-fleur default
 forbidden no-drop
 grab openhand
 grabbing dnd-move
@@ -68,10 +62,8 @@ half-busy progress
 hand pointer
 hand1 pointer
 hand2 pointer
-help default
 ibeam text
 icon dotbox
-left-arrow default
 left_ptr default
 left_ptr_help help
 left_ptr_watch progress
@@ -85,20 +77,12 @@ n-resize size_ver
 ne-resize size_bdiag
 nesw-resize size_bdiag
 no-drop not-allowed
-not-allowed default
 ns-resize size_ver
 nw-resize size_fdiag
 nwse-resize size_fdiag
-openhand default
-pencil default
-pirate default
 plus cell
-pointer default
 pointing_hand pointer
-progress default
 question_arrow help
-right-arrow default
-right_ptr default
 right_side right-arrow
 right_tee
 row-resize size_ver
@@ -110,33 +94,26 @@ sb_right_arrow right-arrow
 sb_up_arrow up-arrow
 sb_v_double_arrow size_ver
 se-resize size_fdiag
-size-bdiag default
-size-fdiag default
-size-hor default
-size-ver default
+size-bdiag size_bdiag
+size-fdiag size_fdiag
+size-hor size_hor
+size-ver size_ver
 size_all fleur
 split_h col-resize
 split_v row-resize
 sw-resize size_bdiag
 target dotbox
 tcross crosshair
-text default
 top_left_arrow default
 top_left_corner size_fdiag
 top_right_corner size_bdiag
 top_side up-arrow
 top_tee
 ul_angle top_left_corner
-up-arrow default
 ur_angle top_right_corner
 v_double_arrow size_ver
 vertical-text text
 w-resize size_hor
-wait default
 watch wait
-wayland-cursor default
 whats_this help
-x-cursor default
 xterm text
-zoom-in default
-zoom-out default
