@@ -14,7 +14,6 @@ fi
 readonly OUTPUT_NAME="volantes_cursors"
 readonly SCRIPT_DIR="$(dirname "$0")"
 readonly SRC_DIR="$SCRIPT_DIR/src"
-#readonly WORKING_DIR="/tmp/$UID-$OUTPUT_NAME"
 readonly OUTPUT_DISPLAY_NAME="Volantes Cursors"
 readonly OUTPUT_DESCRIPTION="Design by varlesh"
 readonly DEFAULT_CURSOR_SIZE=32
