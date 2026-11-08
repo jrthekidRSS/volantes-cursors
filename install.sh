@@ -45,32 +45,6 @@ XCURSOR_INDEX_CONTENTS="\
 Name=$OUTPUT_DISPLAY_NAME
 Comment=$OUTPUT_DESCRIPTION"
 
-SHELL_FORMAT=
-IFS_stsh "$LF"
-
-for __color in $CURSOR_COLORS; do
-	IFS=":${IFS}"
-	[ -n "$__color" ] || continue
-
-	read -r __hex __name _ <<- EOF
-	$__color
-	EOF
-
-	SHELL_FORMAT="${SHELL_FORMAT}${SHELL_FORMAT:+"$LF"}_color_$__name='$__hex'"
-	THEME_JSON_FORMAT="${THEME_JSON_FORMAT}${THEME_JSON_FORMAT:+"$LF"}${HT}\"$__name\": \"%color.$__name%\","
-	FALLBACK_JSON_FORMAT="${FALLBACK_JSON_FORMAT}${FALLBACK_JSON_FORMAT:+"$LF"}${HT}\"$__name\": \"$__hex\","
-done
-
-THEME_JSON_FORMAT="{
-${THEME_JSON_FORMAT%,}
-}"
-
-FALLBACK_JSON_THEME="{
-${FALLBACK_JSON_FORMAT%,}
-}"
-
-IFS_rstr
-
 cleanup() {
 	rm -r "$WORKING_DIR" 2>/dev/null
 }
@@ -80,13 +54,17 @@ cat <<- EOF
 Usage: $SCRIPT_NAME [-ch]
 
 Options:
-	-h, --help			  Show this help
-	-c, --cached-theme	  Location of injected .json file
+	-h, --help			    Show this help
+	-c, --cached-theme	    Location of injected .json file
 	-d, --target-directory  Location of theme's target directory
+	-s, --cursor-size       Intended size of cursor
+	                        Sizes less or equal to 24 will use a slightly
+							different theme
+	-f, --force             Install even if already installed
 EOF
 }
 
-inject_colors() {
+inject_theme() {
 	mkdir "$WORKING_DIR/shell_formats"
 	SHELL_FORMAT="#${WORKING_DIR}$LF${SHELL_FORMAT}"
 	THEME_JSON_FORMAT="#${WORKING_BUILD_DIR}$LF${THEME_JSON_FORMAT}"
@@ -107,19 +85,19 @@ inject_colors() {
 	cp -rt "$WORKING_DIR/cursor_formats" "$WORKING_CURSORS_DIR"/*.svg
 	IFS_stsh "$LF"
 
-	for __inject_colors_line in $CURSOR_COLORS; do
+	for __inject_theme_line in $CURSOR_COLORS; do
 		IFS=":$LF"
 
-		read -r __inject_colors_hex __inject_colors_name __inject_colors_cursor <<- EOF
-		$__inject_colors_line
+		read -r __inject_theme_hex __inject_theme_name __inject_theme_cursor <<- EOF
+		$__inject_theme_line
 		EOF
 
 		eval "
-		if [ \"_color_$__inject_colors_name\" = \"\$__inject_colors_hex\" \\
-			-o \"_color_$__inject_colors_name\" = null ]; then continue; fi
+		if [ \"_theme_$__inject_theme_name\" = \"\$__inject_theme_hex\" \\
+			-o \"_theme_$__inject_theme_name\" = null ]; then continue; fi
 		"
 
-		sed -i -s -e "s+#$__inject_colors_hex+#%$__inject_colors_name%+g" "$WORKING_DIR/cursor_formats/$__inject_colors_cursor"*.svg
+		sed -i -s -e "s+#$__inject_theme_hex+#%$__inject_theme_name%+g" "$WORKING_DIR/cursor_formats/$__inject_theme_cursor"*.svg
 	done
 
 	IFS_rstr
@@ -175,7 +153,12 @@ build_cursors() {
 			$__build_cursors_line
 			EOF
 
-			[ "$__build_cursors_cursor_size" -ge 24 -a "$__build_cursors_cursor_size" -le 32 ] || continue
+			if [ "$CURSOR_SIZE" -le 24 -a "$__build_cursors_cursor_size" = 24 ] || \
+				[ "$CURSOR_SIZE" -gt 24 -a "$__build_cursors_cursor_size" = 32 ]; then
+				:
+			else
+				continue
+			fi
 
 			# Animated cursors are made up of files with slightly different
 			# names between each other
@@ -249,11 +232,8 @@ __build_cursors_gen_hyprcursors() {
 				__build_cursors_gen_hyprcursors_filename \
 				__build_cursors_gen_hyprcursors_delay \
 				|| [ -n "$__build_cursors_gen_hyprcursors_filename" ]; do
-				__build_cursors_gen_hyprcursors_filename_24="${__build_cursors_gen_hyprcursors_filename%.svg}_24.svg"
 
 				[ -n "$__build_cursors_gen_hyprcursors_filename" ] || continue
-				# The cursor will be animated otherwise
-				[ "$__build_cursors_gen_hyprcursors_size" = 32 ] || continue
 
 				if [ -z "$__build_cursors_gen_hyprcursors_meta_hl_contents" ]; then
 					__build_cursors_gen_hyprcursors_working_float="$(( __build_cursors_gen_hyprcursors_hotspot_x + 1 ))"
@@ -275,15 +255,9 @@ __build_cursors_gen_hyprcursors() {
 					__build_cursors_gen_hyprcursors_meta_hl_contents="$__build_cursors_gen_hyprcursors_meta_hl_contents${__build_cursors_gen_hyprcursors_meta_hl_contents:+"$LF"}hotspot_x = $__build_cursors_gen_hyprcursors_hotspot_x${LF}hotspot_y = $__build_cursors_gen_hyprcursors_hotspot_y"
 				fi
 
-				__build_cursors_gen_hyprcursors_meta_hl_frame="define_size = ${__build_cursors_gen_hyprcursors_size}, ${__build_cursors_gen_hyprcursors_filename}"
+				__build_cursors_gen_hyprcursors_meta_hl_frame="define_size = $__build_cursors_gen_hyprcursors_size, ${__build_cursors_gen_hyprcursors_filename}"
 				[ -z "$__build_cursors_gen_hyprcursors_delay" ] || __build_cursors_gen_hyprcursors_meta_hl_frame="${__build_cursors_gen_hyprcursors_meta_hl_frame}, ${__build_cursors_gen_hyprcursors_delay}"
 				link "$WORKING_CURSORS_DIR/$__build_cursors_gen_hyprcursors_filename" "$__build_cursors_gen_hyprcursors_cursors_output/$__build_cursors_gen_hyprcursors_cursor_name/$__build_cursors_gen_hyprcursors_filename"
-
-				if [ -f "$WORKING_CURSORS_DIR/$__build_cursors_gen_hyprcursors_filename_24" ]; then
-					__build_cursors_gen_hyprcursors_meta_hl_frame="$__build_cursors_gen_hyprcursors_meta_hl_frame${LF}define_size = 24, ${__build_cursors_gen_hyprcursors_filename_24}"
-					[ -z "$__build_cursors_gen_hyprcursors_delay" ] || __build_cursors_gen_hyprcursors_meta_hl_frame="${__build_cursors_gen_hyprcursors_meta_hl_frame}, ${__build_cursors_gen_hyprcursors_delay}"
-					link "$WORKING_CURSORS_DIR/$__build_cursors_gen_hyprcursors_filename_24" "$__build_cursors_gen_hyprcursors_cursors_output/$__build_cursors_gen_hyprcursors_cursor_name/$__build_cursors_gen_hyprcursors_filename_24"
-				fi
 
 				__build_cursors_gen_hyprcursors_meta_hl_contents="$__build_cursors_gen_hyprcursors_meta_hl_contents${__build_cursors_gen_hyprcursors_meta_hl_contents:+"$LF"}$__build_cursors_gen_hyprcursors_meta_hl_frame"
 			done <<- EOF
@@ -293,8 +267,8 @@ __build_cursors_gen_hyprcursors() {
 
 		__build_cursors_gen_hyprcursors_meta_hl_contents="$__build_cursors_gen_hyprcursors_meta_hl_contents$LF"
 
-		for __build_cursors_gen_hyprcursors_working_cursor_override in $__build_cursors_gen_hyprcursors_cursor_overrides; do
-			__build_cursors_gen_hyprcursors_meta_hl_contents="$__build_cursors_gen_hyprcursors_meta_hl_contents${LF}define_override = $cursor_override"
+		for __build_cursors_gen_hyprcursors_cursor_override in $__build_cursors_gen_hyprcursors_cursor_overrides; do
+			__build_cursors_gen_hyprcursors_meta_hl_contents="$__build_cursors_gen_hyprcursors_meta_hl_contents${LF}define_override = $__build_cursors_gen_hyprcursors_cursor_override"
 		done
 
 		echor "$__build_cursors_gen_hyprcursors_meta_hl_contents" >> "$__build_cursors_gen_hyprcursors_cursors_output/$__build_cursors_gen_hyprcursors_cursor_name/meta.hl"
@@ -340,6 +314,36 @@ __build_cursors_gen_xcursors() {
 				__build_cursors_gen_xcursors_delay; do
 				[ -n "$__build_cursors_gen_xcursors_filename" ] || continue
 
+				echo
+				__build_cursors_gen_xcursors_working_int="$(( __build_cursors_gen_xcursors_hotspot_x + 1 ))"
+				echo "1 $__build_cursors_gen_xcursors_hotspot_x: $__build_cursors_gen_xcursors_working_int"
+				__build_cursors_gen_xcursors_working_int="${__build_cursors_gen_xcursors_working_int}00"
+				echo "2 $__build_cursors_gen_xcursors_hotspot_x: $__build_cursors_gen_xcursors_working_int"
+				__build_cursors_gen_xcursors_working_int="$(( __build_cursors_gen_xcursors_working_int / __build_cursors_gen_xcursors_size ))"
+				echo "3 $__build_cursors_gen_xcursors_hotspot_x: $__build_cursors_gen_xcursors_working_int"
+				echo "size=$__build_cursors_gen_xcursors_size CURSOR_SIZE=$CURSOR_SIZE"
+				__build_cursors_gen_xcursors_working_int="$(( __build_cursors_gen_xcursors_working_int * CURSOR_SIZE ))"
+				echo "4 $__build_cursors_gen_xcursors_hotspot_x: $__build_cursors_gen_xcursors_working_int"
+				[ "${#__build_cursors_gen_xcursors_working_int}" -gt 1 ] || __build_cursors_gen_xcursors_working_int="0$__build_cursors_gen_xcursors_working_int"
+				echo "5 $__build_cursors_gen_xcursors_hotspot_x: $__build_cursors_gen_xcursors_working_int"
+				[ "${#__build_cursors_gen_xcursors_working_int}" -gt 2 ] || __build_cursors_gen_xcursors_working_int="0$__build_cursors_gen_xcursors_working_int"
+				echo "6 $__build_cursors_gen_xcursors_hotspot_x: $__build_cursors_gen_xcursors_working_int"
+				__build_cursors_gen_xcursors_working_int="${__build_cursors_gen_xcursors_working_int%[[:digit:]][[:digit:]]}"
+				[ "$__build_cursors_gen_xcursors_working_int" -gt 1 ] || __build_cursors_gen_xcursors_working_int="$(( __build_cursors_gen_xcursors_working_int - 1 ))"
+				echo "7 $__build_cursors_gen_xcursors_hotspot_x: $__build_cursors_gen_xcursors_working_int"
+				__build_cursors_gen_xcursors_hotspot_x="$__build_cursors_gen_xcursors_working_int"
+
+				__build_cursors_gen_xcursors_working_int="$(( __build_cursors_gen_xcursors_hotspot_y + 1 ))"
+				echo "8 $__build_cursors_gen_xcursors_hotspot_x: $__build_cursors_gen_xcursors_working_int"
+				__build_cursors_gen_xcursors_working_int="${__build_cursors_gen_xcursors_working_int}00"
+				echo "9 $__build_cursors_gen_xcursors_hotspot_x: $__build_cursors_gen_xcursors_working_int"
+				__build_cursors_gen_xcursors_working_int="$(( __build_cursors_gen_xcursors_working_int / __build_cursors_gen_xcursors_size ))"
+				__build_cursors_gen_xcursors_working_int="$(( __build_cursors_gen_xcursors_working_int * CURSOR_SIZE ))"
+				[ "${#__build_cursors_gen_xcursors_working_int}" -gt 1 ] || __build_cursors_gen_xcursors_working_int="0$__build_cursors_gen_xcursors_working_int"
+				[ "${#__build_cursors_gen_xcursors_working_int}" -gt 2 ] || __build_cursors_gen_xcursors_working_int="0$__build_cursors_gen_xcursors_working_int"
+				__build_cursors_gen_xcursors_working_int="${__build_cursors_gen_xcursors_working_int%[[:digit:]][[:digit:]]}"
+				__build_cursors_gen_xcursors_hotspot_y="$(( __build_cursors_gen_xcursors_working_int - 1 ))"
+
 				__build_cursors_gen_xcursors_metadata_json_contents="$__build_cursors_gen_xcursors_metadata_json_contents${__build_cursors_gen_xcursors_metadata_json_contents:+,}
 	{
 		\"filename\": \"$__build_cursors_gen_xcursors_filename\",
@@ -359,7 +363,6 @@ __build_cursors_gen_xcursors() {
 
 		__build_cursors_gen_xcursors_metadata_json_contents="[$LF${__build_cursors_gen_xcursors_metadata_json_contents}$LF]"
 
-		: HERE "$__build_cursors_gen_xcursors_cursor_overrides"
 		for __build_cursors_gen_xcursors_cursor_override in $__build_cursors_gen_xcursors_cursor_overrides; do
 			[ -f "$WORKING_CURSORS_DIR/$__build_cursors_gen_xcursors_cursor_override.svg" -o -f "$WORKING_CURSORS_DIR/$__build_cursors_gen_xcursors_cursor_override-01.svg" ] || \
 				ln -s "$__build_cursors_gen_xcursors_cursor_name" "$__build_cursors_gen_xcursors_xcursors_output/$__build_cursors_gen_xcursors_cursor_override"
@@ -369,7 +372,7 @@ __build_cursors_gen_xcursors() {
 	done
 
 	kcursorgen --svg-theme-to-xcursor --svg-dir "$__build_cursors_gen_xcursors_svgcursors_output" \
-		--xcursor-dir "$__build_cursors_gen_xcursors_xcursors_output" --sizes '24,32' --scales '1,2,3' 2>/dev/null
+		--xcursor-dir "$__build_cursors_gen_xcursors_xcursors_output" --sizes "$CURSOR_SIZE" --scales '1' 2>/dev/null
 	IFS="$LF"
 
 	IFS_rstr
@@ -379,6 +382,7 @@ __build_cursors_gen_xcursors() {
 parse_args "$@" << FMT
 c:cached-theme:CACHED_THEME_FILE:string:$CACHED_THEME_FILE
 d:target-directory:OUTPUT_DIR:string:$OUTPUT_DIR
+s:cursor-size:CURSOR_SIZE:string:$DEFAULT_CURSOR_SIZE
 f:force:FORCE_INSTALL:bool:false
 FMT
 
@@ -396,6 +400,43 @@ case $? in
         ;;
 esac
 
+if ! [ "$CURSOR_SIZE" -gt 0 ] 2>/dev/null; then
+	echoerr "error: cursor size is not a valid positive integer"
+	exit 4
+fi
+
+SHELL_FORMAT=
+THEME_JSON_FORMAT=
+FALLBACK_JSON_FORMAT=
+IFS_stsh "$LF"
+
+for __color in $CURSOR_COLORS; do
+	IFS=":${IFS}"
+	[ -n "$__color" ] || continue
+
+	read -r __hex __name _ <<- EOF
+	$__color
+	EOF
+
+	SHELL_FORMAT="${SHELL_FORMAT}${SHELL_FORMAT:+"$LF"}_theme_$__name='$__hex'"
+	THEME_JSON_FORMAT="${THEME_JSON_FORMAT}${THEME_JSON_FORMAT:+"$LF"}${HT}\"$__name\": \"%color.$__name%\","
+	FALLBACK_JSON_FORMAT="${FALLBACK_JSON_FORMAT}${FALLBACK_JSON_FORMAT:+"$LF"}${HT}\"$__name\": \"$__hex\","
+done
+
+SHELL_FORMAT="$SHELL_FORMAT
+_theme_size=$CURSOR_SIZE"
+THEME_JSON_FORMAT="{
+$THEME_JSON_FORMAT
+	\"size\": $CURSOR_SIZE
+}"
+
+FALLBACK_JSON_THEME="{
+$FALLBACK_JSON_FORMAT
+	\"size\": 32
+}"
+
+IFS_rstr
+
 set -e
 
 WORKING_DIR="$(mktemp -d)"
@@ -407,6 +448,6 @@ trap 'err=$?; cleanup; exit $?' TERM INT QUIT
 mkdir "$WORKING_BUILD_DIR" "$WORKING_CURSORS_DIR"
 cp -dt "$WORKING_CURSORS_DIR" "$SRC_DIR/volantes_cursors"/*.svg
 
-inject_colors || :
+inject_theme || :
 build_cursors
 install_cursors
