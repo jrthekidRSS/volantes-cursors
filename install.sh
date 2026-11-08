@@ -314,29 +314,18 @@ __build_cursors_gen_xcursors() {
 				__build_cursors_gen_xcursors_delay; do
 				[ -n "$__build_cursors_gen_xcursors_filename" ] || continue
 
-				echo
 				__build_cursors_gen_xcursors_working_int="$(( __build_cursors_gen_xcursors_hotspot_x + 1 ))"
-				echo "1 $__build_cursors_gen_xcursors_hotspot_x: $__build_cursors_gen_xcursors_working_int"
 				__build_cursors_gen_xcursors_working_int="${__build_cursors_gen_xcursors_working_int}00"
-				echo "2 $__build_cursors_gen_xcursors_hotspot_x: $__build_cursors_gen_xcursors_working_int"
 				__build_cursors_gen_xcursors_working_int="$(( __build_cursors_gen_xcursors_working_int / __build_cursors_gen_xcursors_size ))"
-				echo "3 $__build_cursors_gen_xcursors_hotspot_x: $__build_cursors_gen_xcursors_working_int"
-				echo "size=$__build_cursors_gen_xcursors_size CURSOR_SIZE=$CURSOR_SIZE"
 				__build_cursors_gen_xcursors_working_int="$(( __build_cursors_gen_xcursors_working_int * CURSOR_SIZE ))"
-				echo "4 $__build_cursors_gen_xcursors_hotspot_x: $__build_cursors_gen_xcursors_working_int"
 				[ "${#__build_cursors_gen_xcursors_working_int}" -gt 1 ] || __build_cursors_gen_xcursors_working_int="0$__build_cursors_gen_xcursors_working_int"
-				echo "5 $__build_cursors_gen_xcursors_hotspot_x: $__build_cursors_gen_xcursors_working_int"
 				[ "${#__build_cursors_gen_xcursors_working_int}" -gt 2 ] || __build_cursors_gen_xcursors_working_int="0$__build_cursors_gen_xcursors_working_int"
-				echo "6 $__build_cursors_gen_xcursors_hotspot_x: $__build_cursors_gen_xcursors_working_int"
 				__build_cursors_gen_xcursors_working_int="${__build_cursors_gen_xcursors_working_int%[[:digit:]][[:digit:]]}"
 				[ "$__build_cursors_gen_xcursors_working_int" -gt 1 ] || __build_cursors_gen_xcursors_working_int="$(( __build_cursors_gen_xcursors_working_int - 1 ))"
-				echo "7 $__build_cursors_gen_xcursors_hotspot_x: $__build_cursors_gen_xcursors_working_int"
 				__build_cursors_gen_xcursors_hotspot_x="$__build_cursors_gen_xcursors_working_int"
 
 				__build_cursors_gen_xcursors_working_int="$(( __build_cursors_gen_xcursors_hotspot_y + 1 ))"
-				echo "8 $__build_cursors_gen_xcursors_hotspot_x: $__build_cursors_gen_xcursors_working_int"
 				__build_cursors_gen_xcursors_working_int="${__build_cursors_gen_xcursors_working_int}00"
-				echo "9 $__build_cursors_gen_xcursors_hotspot_x: $__build_cursors_gen_xcursors_working_int"
 				__build_cursors_gen_xcursors_working_int="$(( __build_cursors_gen_xcursors_working_int / __build_cursors_gen_xcursors_size ))"
 				__build_cursors_gen_xcursors_working_int="$(( __build_cursors_gen_xcursors_working_int * CURSOR_SIZE ))"
 				[ "${#__build_cursors_gen_xcursors_working_int}" -gt 1 ] || __build_cursors_gen_xcursors_working_int="0$__build_cursors_gen_xcursors_working_int"
