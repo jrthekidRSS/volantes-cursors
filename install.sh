@@ -1,415 +1,413 @@
-#!/usr/bin/env bash
+#!/usr/bin/env sh
 
-readonly USER_ID="$(id -u)"
+. "$SHSTD/mod.sh"
+lib_source std/types/path std/parse-args
 
-if [[ "$USER_ID" == 0 ]]; then
-    OUTPUT_DIR="/usr/share/icons"
+readonly UID="$(id -u)"
+
+if [ "$UID" = 0 ]; then
+	OUTPUT_DIR="/usr/share/icons"
 else
-    OUTPUT_DIR="$HOME/.local/share/icons"
+	OUTPUT_DIR="${XDG_DATA_HOME:-"$HOME/.local/share"}/icons"
 fi
 
 readonly OUTPUT_NAME="volantes_cursors"
-readonly SCRIPT_NAME="$(basename "$0")" readonly SCRIPT_DIR="$(dirname "$0")"
-readonly SRC_DIR="$(dirname -- "$0")/src"
-readonly WORKING_DIR="/tmp/$USER_ID-$OUTPUT_NAME"
-readonly WORKING_CURSORS_DIR="$WORKING_DIR/cursors"
+readonly SCRIPT_DIR="$(dirname "$0")"
+readonly SRC_DIR="$SCRIPT_DIR/src"
+#readonly WORKING_DIR="/tmp/$UID-$OUTPUT_NAME"
 readonly OUTPUT_DISPLAY_NAME="Volantes Cursors"
 readonly OUTPUT_DESCRIPTION="Design by varlesh"
 readonly DEFAULT_CURSOR_SIZE=32
 readonly DOUBLE_TAB=$'\t\t'
-readonly CURSOR_COLORS=(
-    "232627:cursor_fg:"
-    "efefef:cursor_bg:"
-    "d728d7:mauve:alias"
-    "ff8a15:peach:context-menu"
-    "47a400:green:copy"
-    "435ece:sapphire:dnd-ask"
-    "7753c5:lavender:dnd-link"
-    "ef326f:red:dnd-no-drop"
-    "3d5cdb:blue:help"
-    "ff1a1a:red:pirate"
-    "ff8a15:peach:wayland-cursor"
-    "00aea9:teal:progress"
-    "00aea9:teal:wait"
-    "ab6439:rosewater:x-cursor"
-)
+CURSOR_COLORS='
+232627:cursor_fg:
+efefef:cursor_bg:
+d728d7:mauve:alias
+ff8a15:peach:context-menu
+47a400:green:copy
+435ece:sapphire:dnd-ask
+7753c5:lavender:dnd-link
+ef326f:red:dnd-no-drop
+3d5cdb:blue:help
+ff1a1a:red:pirate
+ff8a15:peach:wayland-cursor
+00aea9:teal:progress
+00aea9:teal:wait
+ab6439:rosewater:x-cursor
+'
 
-read -r -d '' HYPRCURSORS_MANIFEST_CONTENTS <<- EOF
+readonly HYPRCURSORS_MANIFEST_CONTENTS="\
 name = $OUTPUT_DISPLAY_NAME
 description = $OUTPUT_DESCRIPTION
-cursors_directory = hyprcursors
-EOF
+cursors_directory = hyprcursors"
 
-read -r -d '' XCURSOR_INDEX_CONTENTS <<- EOF
+XCURSOR_INDEX_CONTENTS="\
 [Icon Theme]
 Name=$OUTPUT_DISPLAY_NAME
-Comment=$OUTPUT_DESCRIPTION
-EOF
+Comment=$OUTPUT_DESCRIPTION"
 
-read -r -d '' JQ_FORMAT <<- "EOF"
-"\(.color.cursor_fg)
-\(.color.cursor_bg)
-\(.color.teal)
-\(.color.red)
-\(.color.green)
-\(.color.rosewater)
-\(.color.sapphire)
-\(.color.lavender)
-\(.color.mauve)
-\(.color.peach)
-\(.color.blue)"
-EOF
+SHELL_FORMAT=
+IFS_stsh "$LF"
 
-read -r -d '' THEME_JSON_FORMAT <<- EOF
-{
-    "cursor_fg": "%s",
-    "cursor_bg": "%s",
-    "teal": "%s",
-    "red": "%s",
-    "green": "%s",
-    "rosewater": "%s",
-    "sapphire": "%s",
-    "lavender": "%s",
-    "mauve": "%s",
-    "peach": "%s",
-    "blue": "%s"
-}
-EOF
+for __color in $CURSOR_COLORS; do
+	IFS=":${IFS}"
+	[ -n "$__color" ] || continue
+
+	read -r __hex __name _ <<- EOF
+	$__color
+	EOF
+
+	SHELL_FORMAT="${SHELL_FORMAT}${SHELL_FORMAT:+"$LF"}_color_$__name='$__hex'"
+	THEME_JSON_FORMAT="${THEME_JSON_FORMAT}${THEME_JSON_FORMAT:+"$LF"}${HT}\"$__name\": \"%color.$__name%\","
+	FALLBACK_JSON_FORMAT="${FALLBACK_JSON_FORMAT}${FALLBACK_JSON_FORMAT:+"$LF"}${HT}\"$__name\": \"$__hex\","
+done
+
+THEME_JSON_FORMAT="{
+${THEME_JSON_FORMAT%,}
+}"
+
+FALLBACK_JSON_THEME="{
+${FALLBACK_JSON_FORMAT%,}
+}"
+
+IFS_rstr
 
 cleanup() {
-    rm -r "$WORKING_DIR" 2>/dev/null
+	rm -r "$WORKING_DIR" 2>/dev/null
 }
 
-print-help() {
+print_help() {
 cat <<- EOF
 Usage: $SCRIPT_NAME [-ch]
 
 Options:
-    -h, --help              Show this help
-    -c, --cached-theme      Location of injected .json file
-    -d, --target-directory  Location of theme's target directory
+	-h, --help			  Show this help
+	-c, --cached-theme	  Location of injected .json file
+	-d, --target-directory  Location of theme's target directory
 EOF
 }
 
-inject-colors() {
-    local jq_output
-    set -e
-    jq_output="$(jq -r "$JQ_FORMAT" "$CACHED_THEME_FILE" 2>/dev/null)"
-    set +e
+inject_colors() {
+	mkdir "$WORKING_DIR/shell_formats"
+	SHELL_FORMAT="#${WORKING_DIR}$LF${SHELL_FORMAT}"
+	THEME_JSON_FORMAT="#${WORKING_BUILD_DIR}$LF${THEME_JSON_FORMAT}"
+	echo "$SHELL_FORMAT" > "$WORKING_DIR/shell_formats/theme.sh"
+	echo "$THEME_JSON_FORMAT" > "$WORKING_DIR/shell_formats/theme.json"
+	echo "$FALLBACK_JSON_THEME" > "$WORKING_DIR/fallback_colors.json"
+	theme-injector -Ef "$WORKING_DIR/shell_formats" "$WORKING_DIR/fallback_colors.json" "$CACHED_THEME_FILE" || return 0
+	. "$WORKING_DIR/theme.sh"
 
-    IFS=$'\n' read -r -d '' cursor_fg cursor_bg teal red \
-    green rosewater sapphire lavender mauve peach blue  \
-    <<< "$jq_output"
 
-    local json_output="$(printf "$THEME_JSON_FORMAT" "${cursor_fg:-null}" "${cursor_bg:-null}" \
-    "${teal:-null}" "${red:-null}" "${green:-null}" "${rosewater:-null}" "${sapphire:-null}" "${lavender:-null}" "${mauve:-null}" "${peach:-null}" "${blue:-null}")"
+	if [ "$(cat "$WORKING_BUILD_DIR/theme.json")" = "$(cat "$OUTPUT_DIR/$OUTPUT_NAME/theme.json" 2>/dev/null || :)" ] && \
+		! $FORCE_INSTALL; then
+		echoerr "warning: '$OUTPUT_NAME' is already installed"
+		exit 0
+	fi
 
-    if [[ "$json_output" == "$(cat "$OUTPUT_DIR/$OUTPUT_NAME/theme.json" 2>/dev/null)" ]]; then
-        echo "warning: '$OUTPUT_NAME' is already installed" 1>&2
+	mkdir "$WORKING_DIR/cursor_formats"
+	cp -rt "$WORKING_DIR/cursor_formats" "$WORKING_CURSORS_DIR"/*.svg
+	IFS_stsh "$LF"
+
+	for __inject_colors_line in $CURSOR_COLORS; do
+		IFS=":$LF"
+
+		read -r __inject_colors_hex __inject_colors_name __inject_colors_cursor <<- EOF
+		$__inject_colors_line
+		EOF
+
+		eval "
+		if [ \"_color_$__inject_colors_name\" = \"\$__inject_colors_hex\" \\
+			-o \"_color_$__inject_colors_name\" = null ]; then continue; fi
+		"
+
+		sed -i -s -e "s+#$__inject_colors_hex+#%$__inject_colors_name%+g" "$WORKING_DIR/cursor_formats/$__inject_colors_cursor"*.svg
+	done
+
+	IFS_rstr
+	sed -i -s -z -e "s+^+#${WORKING_CURSORS_DIR}\n+" "$WORKING_DIR/cursor_formats/"*
+	theme-injector -Ef "$WORKING_DIR/cursor_formats" "$WORKING_BUILD_DIR/theme.json"
+}
+
+install_cursors() {
+	cp -rdT "$WORKING_BUILD_DIR" "$OUTPUT_DIR/$OUTPUT_NAME"
+}
+
+build_cursors() {
+	# cursors_items format: CURSOR_NAME:FRAMES:OVERRIDES
+	# FRAME format: HOTSPOT_X,HOTSPOT_Y,SIZE,FILENAME,[DELAY]
+	# FRAMES format: FRAME;FRAME;FRAME;[...]
+	# OVERRIDES format: [OVERRIDE;OVERRIDE;...]
+	__build_cursors_cursor_items=
+	__build_cursors_cursorList="$LF$(cat "$SRC_DIR/cursorList" 2>/dev/null)$LF"
+
+	cd "$WORKING_CURSORS_DIR"
+	for __build_cursors_svg in *; do
+		case "$__build_cursors_svg" in
+			*_24.svg)
+				continue
+				;;
+			*-00.svg | *-0[2-9].svg | *-[1-9][[:digit:]].svg)
+				continue
+				;;
+			*-01.svg)
+				__build_cursors_cursor_name="${__build_cursors_svg%-01.svg}"
+				;;
+			*.svg)
+				__build_cursors_cursor_name="${__build_cursors_svg%.svg}"
+				;;
+			*)
+				continue
+				;;
+		esac
+
+		__build_cursors_cursor_frames=
+		__build_cursors_cursor_overrides=
+
+		# Read cursor's config file
+		while read -r __build_cursors_line; do
+			__build_cursors_hotspot_x=
+			__build_cursors_hotspot_y=
+			read -r __build_cursors_cursor_size \
+				__build_cursors_hotspot_x \
+				__build_cursors_hotspot_y \
+				__build_cursors_cursor_filename \
+				__build_cursors_cursor_delay \
+			<<- EOF
+			$__build_cursors_line
+			EOF
+
+			[ "$__build_cursors_cursor_size" -ge 24 -a "$__build_cursors_cursor_size" -le 32 ] || continue
+
+			# Animated cursors are made up of files with slightly different
+			# names between each other
+			__build_cursors_cursor_file="$__build_cursors_svg"
+			__build_cursors_cursor_frame="${__build_cursors_cursor_filename%_[[:digit:]][[:digit:]].png}"
+
+			[ "$__build_cursors_cursor_frame" = "$__build_cursors_cursor_name" ] || \
+				__build_cursors_cursor_file="${__build_cursors_cursor_frame}.svg"
+			
+			__build_cursors_cursor_frame_item="${__build_cursors_hotspot_x},${__build_cursors_hotspot_y},${__build_cursors_cursor_size},${__build_cursors_cursor_file}${__build_cursors_cursor_delay:+",${__build_cursors_cursor_delay}"}"
+
+			__build_cursors_cursor_frames="$__build_cursors_cursor_frames${__build_cursors_cursor_frames:+;}$__build_cursors_cursor_frame_item"
+		done < "$SRC_DIR/config/$__build_cursors_cursor_name.cursor"
+
+		case "$__build_cursors_cursorList" in
+			*" ${__build_cursors_cursor_name}$LF"*)
+				IFS_stsh "$LF"
+
+				for __build_cursors_working_override in $__build_cursors_cursorList; do
+					case "$__build_cursors_working_override" in
+						*" $__build_cursors_cursor_name")
+							__build_cursors_working_override="${__build_cursors_working_override%%[[:space:]]*}"
+							__build_cursors_cursor_overrides="$__build_cursors_cursor_overrides${__build_cursors_cursor_overrides:+";"}$__build_cursors_working_override"
+							;;
+					esac
+				done
+
+				IFS_rstr
+				;;
+		esac
+
+		__build_cursors_cursor_items="$__build_cursors_cursor_items${__build_cursors_cursor_items:+"$LF"}$__build_cursors_cursor_name:$__build_cursors_cursor_frames"
+		__build_cursors_cursor_items="$__build_cursors_cursor_items${__build_cursors_cursor_overrides:+:}$__build_cursors_cursor_overrides"
+	done
+
+	IFS_stsh "$LF"
+	__build_cursors_gen_hyprcursors $__build_cursors_cursor_items &
+	__build_cursors_gen_xcursors $__build_cursors_cursor_items &
+	wait
+	IFS_rstr
+}
+
+__build_cursors_gen_hyprcursors() {
+	printf %s "$HYPRCURSORS_MANIFEST_CONTENTS" > "$WORKING_DIR/manifest.hl"
+	__build_cursors_gen_hyprcursors_cursors_output="$WORKING_DIR/hyprcursors"
+	mkdir "$__build_cursors_gen_hyprcursors_cursors_output"
+	
+	for __build_cursors_gen_hyprcursors_cursor in "$@"; do
+		__build_cursors_gen_hyprcursors_meta_hl_contents=
+
+		IFS_stsh :
+		read -r \
+		__build_cursors_gen_hyprcursors_cursor_name \
+		__build_cursors_gen_hyprcursors_cursor_frames \
+		__build_cursors_gen_hyprcursors_cursor_overrides \
+		<<- EOF
+		$__build_cursors_gen_hyprcursors_cursor
+		EOF
+
+		IFS=';'
+		: "$__build_cursors_gen_hyprcursors_cursor"
+		: $__build_cursors_gen_hyprcursors_cursor_frames
+		mkdir "$__build_cursors_gen_hyprcursors_cursors_output/$__build_cursors_gen_hyprcursors_cursor_name"
+
+		for __build_cursors_gen_hyprcursors_cursor_frame in $__build_cursors_gen_hyprcursors_cursor_frames; do
+			: $__build_cursors_gen_hyprcursors_cursor_frame
+			while IFS=',' read -r \
+				__build_cursors_gen_hyprcursors_hotspot_x \
+				__build_cursors_gen_hyprcursors_hotspot_y \
+				__build_cursors_gen_hyprcursors_size \
+				__build_cursors_gen_hyprcursors_filename \
+				__build_cursors_gen_hyprcursors_delay \
+				|| [ -n "$__build_cursors_gen_hyprcursors_filename" ]; do
+				__build_cursors_gen_hyprcursors_filename_24="${__build_cursors_gen_hyprcursors_filename%.svg}_24.svg"
+
+				[ -n "$__build_cursors_gen_hyprcursors_filename" ] || continue
+				# The cursor will be animated otherwise
+				[ "$__build_cursors_gen_hyprcursors_size" = 32 ] || continue
+
+				if [ -z "$__build_cursors_gen_hyprcursors_meta_hl_contents" ]; then
+					__build_cursors_gen_hyprcursors_working_float="$(( __build_cursors_gen_hyprcursors_hotspot_x + 1 ))"
+					__build_cursors_gen_hyprcursors_working_float="${__build_cursors_gen_hyprcursors_working_float}00"
+					__build_cursors_gen_hyprcursors_working_float="$(( __build_cursors_gen_hyprcursors_working_float / __build_cursors_gen_hyprcursors_size ))"
+					[ "${#__build_cursors_gen_hyprcursors_working_float}" -gt 1 ] || __build_cursors_gen_hyprcursors_working_float="0$__build_cursors_gen_hyprcursors_working_float"
+					[ "${#__build_cursors_gen_hyprcursors_working_float}" -gt 2 ] || __build_cursors_gen_hyprcursors_working_float="0$__build_cursors_gen_hyprcursors_working_float"
+					__build_cursors_gen_hyprcursors_working_int="${__build_cursors_gen_hyprcursors_working_float%[[:digit:]][[:digit:]]}"
+					__build_cursors_gen_hyprcursors_working_float="${__build_cursors_gen_hyprcursors_working_float#"$__build_cursors_gen_hyprcursors_working_int"}"
+					__build_cursors_gen_hyprcursors_hotspot_x="${__build_cursors_gen_hyprcursors_working_int:-0}.$__build_cursors_gen_hyprcursors_working_float"
+					__build_cursors_gen_hyprcursors_working_float="$(( __build_cursors_gen_hyprcursors_hotspot_y + 1 ))"
+					__build_cursors_gen_hyprcursors_working_float="${__build_cursors_gen_hyprcursors_working_float}00"
+					__build_cursors_gen_hyprcursors_working_float="$(( __build_cursors_gen_hyprcursors_working_float / __build_cursors_gen_hyprcursors_size ))"
+					[ "${#__build_cursors_gen_hyprcursors_working_float}" -gt 1 ] || __build_cursors_gen_hyprcursors_working_float="0$__build_cursors_gen_hyprcursors_working_float"
+					[ "${#__build_cursors_gen_hyprcursors_working_float}" -gt 2 ] || __build_cursors_gen_hyprcursors_working_float="0$__build_cursors_gen_hyprcursors_working_float"
+					__build_cursors_gen_hyprcursors_working_int="${__build_cursors_gen_hyprcursors_working_float%[[:digit:]][[:digit:]]}"
+					__build_cursors_gen_hyprcursors_working_float="${__build_cursors_gen_hyprcursors_working_float#"$__build_cursors_gen_hyprcursors_working_int"}"
+					__build_cursors_gen_hyprcursors_hotspot_y="${__build_cursors_gen_hyprcursors_working_int:-0}.$__build_cursors_gen_hyprcursors_working_float"
+					__build_cursors_gen_hyprcursors_meta_hl_contents="$__build_cursors_gen_hyprcursors_meta_hl_contents${__build_cursors_gen_hyprcursors_meta_hl_contents:+"$LF"}hotspot_x = $__build_cursors_gen_hyprcursors_hotspot_x${LF}hotspot_y = $__build_cursors_gen_hyprcursors_hotspot_y"
+				fi
+
+				__build_cursors_gen_hyprcursors_meta_hl_frame="define_size = ${__build_cursors_gen_hyprcursors_size}, ${__build_cursors_gen_hyprcursors_filename}"
+				[ -z "$__build_cursors_gen_hyprcursors_delay" ] || __build_cursors_gen_hyprcursors_meta_hl_frame="${__build_cursors_gen_hyprcursors_meta_hl_frame}, ${__build_cursors_gen_hyprcursors_delay}"
+				link "$WORKING_CURSORS_DIR/$__build_cursors_gen_hyprcursors_filename" "$__build_cursors_gen_hyprcursors_cursors_output/$__build_cursors_gen_hyprcursors_cursor_name/$__build_cursors_gen_hyprcursors_filename"
+
+				if [ -f "$WORKING_CURSORS_DIR/$__build_cursors_gen_hyprcursors_filename_24" ]; then
+					__build_cursors_gen_hyprcursors_meta_hl_frame="$__build_cursors_gen_hyprcursors_meta_hl_frame${LF}define_size = 24, ${__build_cursors_gen_hyprcursors_filename_24}"
+					[ -z "$__build_cursors_gen_hyprcursors_delay" ] || __build_cursors_gen_hyprcursors_meta_hl_frame="${__build_cursors_gen_hyprcursors_meta_hl_frame}, ${__build_cursors_gen_hyprcursors_delay}"
+					link "$WORKING_CURSORS_DIR/$__build_cursors_gen_hyprcursors_filename_24" "$__build_cursors_gen_hyprcursors_cursors_output/$__build_cursors_gen_hyprcursors_cursor_name/$__build_cursors_gen_hyprcursors_filename_24"
+				fi
+
+				__build_cursors_gen_hyprcursors_meta_hl_contents="$__build_cursors_gen_hyprcursors_meta_hl_contents${__build_cursors_gen_hyprcursors_meta_hl_contents:+"$LF"}$__build_cursors_gen_hyprcursors_meta_hl_frame"
+			done <<- EOF
+			$__build_cursors_gen_hyprcursors_cursor_frame
+			EOF
+		done
+
+		__build_cursors_gen_hyprcursors_meta_hl_contents="$__build_cursors_gen_hyprcursors_meta_hl_contents$LF"
+
+		for __build_cursors_gen_hyprcursors_working_cursor_override in $__build_cursors_gen_hyprcursors_cursor_overrides; do
+			__build_cursors_gen_hyprcursors_meta_hl_contents="$__build_cursors_gen_hyprcursors_meta_hl_contents${LF}define_override = $cursor_override"
+		done
+
+		echor "$__build_cursors_gen_hyprcursors_meta_hl_contents" >> "$__build_cursors_gen_hyprcursors_cursors_output/$__build_cursors_gen_hyprcursors_cursor_name/meta.hl"
+		IFS_rstr
+	done
+
+	hyprcursor-util --create "$WORKING_DIR" --output "$WORKING_BUILD_DIR" 1>/dev/null
+	mv -t "$WORKING_BUILD_DIR" "$WORKING_BUILD_DIR/theme_$OUTPUT_DISPLAY_NAME/"*
+	rmdir "$WORKING_BUILD_DIR/theme_$OUTPUT_DISPLAY_NAME"
+}
+
+__build_cursors_gen_xcursors() {
+	printf %s "$XCURSOR_INDEX_CONTENTS" > "$WORKING_BUILD_DIR/index.theme"
+	__build_cursors_gen_xcursors_svgcursors_output="$WORKING_BUILD_DIR/cursors_scalable"
+	__build_cursors_gen_xcursors_xcursors_output="$WORKING_BUILD_DIR/cursors"
+	#__build_cursors_gen_xcursors_overrides=
+	mkdir "$__build_cursors_gen_xcursors_svgcursors_output" "$__build_cursors_gen_xcursors_xcursors_output"
+	IFS_stsh ';'
+	
+	for __build_cursors_gen_xcursors_cursor in "$@"; do
+		__build_cursors_gen_xcursors_cursor_name=
+		__build_cursors_gen_xcursors_cursor_frames=
+		__build_cursors_gen_xcursors_cursor_overrides=
+		__build_cursors_gen_xcursors_metadata_json_contents=
+
+		IFS=':' read -r __build_cursors_gen_xcursors_cursor_name \
+		__build_cursors_gen_xcursors_cursor_frames \
+		__build_cursors_gen_xcursors_cursor_overrides \
+		<<- EOF
+		$__build_cursors_gen_xcursors_cursor
+		EOF
+
+		[ ! -L "$__build_cursors_gen_xcursors_xcursor_output/$__build_cursors_gen_xcursors_cursor_name" ] || \
+			unlink "$__build_cursors_gen_xcursors_xcursor_output/$__build_cursors_gen_xcursors_cursor_name"
+		mkdir "$__build_cursors_gen_xcursors_svgcursors_output/$__build_cursors_gen_xcursors_cursor_name"
+
+		for __build_cursors_gen_xcursors_cursor_frame in $__build_cursors_gen_xcursors_cursor_frames; do
+			while IFS=',' read -r \
+				__build_cursors_gen_xcursors_hotspot_x \
+				__build_cursors_gen_xcursors_hotspot_y \
+				__build_cursors_gen_xcursors_size \
+				__build_cursors_gen_xcursors_filename \
+				__build_cursors_gen_xcursors_delay; do
+				[ -n "$__build_cursors_gen_xcursors_filename" ] || continue
+
+				__build_cursors_gen_xcursors_metadata_json_contents="$__build_cursors_gen_xcursors_metadata_json_contents${__build_cursors_gen_xcursors_metadata_json_contents:+,}
+	{
+		\"filename\": \"$__build_cursors_gen_xcursors_filename\",
+		\"hotspot_x\": $__build_cursors_gen_xcursors_hotspot_x,
+		\"hotspot_y\": $__build_cursors_gen_xcursors_hotspot_y,
+		\"nominal_size\": $__build_cursors_gen_xcursors_size"
+				
+				[ -z "$__build_cursors_gen_xcursors_delay" ] || __build_cursors_gen_xcursors_metadata_json_contents="$__build_cursors_gen_xcursors_metadata_json_contents,${LF}${HT}${HT}\"delay\": $__build_cursors_gen_xcursors_delay"
+
+				__build_cursors_gen_xcursors_metadata_json_contents="${__build_cursors_gen_xcursors_metadata_json_contents}${LF}${HT}}"
+
+				cp -T "$WORKING_CURSORS_DIR/$__build_cursors_gen_xcursors_filename" "$__build_cursors_gen_xcursors_svgcursors_output/$__build_cursors_gen_xcursors_cursor_name/$__build_cursors_gen_xcursors_filename"
+			done <<- EOF
+			$__build_cursors_gen_xcursors_cursor_frame
+			EOF
+		done
+
+		__build_cursors_gen_xcursors_metadata_json_contents="[$LF${__build_cursors_gen_xcursors_metadata_json_contents}$LF]"
+
+		: HERE "$__build_cursors_gen_xcursors_cursor_overrides"
+		for __build_cursors_gen_xcursors_cursor_override in $__build_cursors_gen_xcursors_cursor_overrides; do
+			[ -f "$WORKING_CURSORS_DIR/$__build_cursors_gen_xcursors_cursor_override.svg" -o -f "$WORKING_CURSORS_DIR/$__build_cursors_gen_xcursors_cursor_override-01.svg" ] || \
+				ln -s "$__build_cursors_gen_xcursors_cursor_name" "$__build_cursors_gen_xcursors_xcursors_output/$__build_cursors_gen_xcursors_cursor_override"
+		done
+
+		printf %s "$__build_cursors_gen_xcursors_metadata_json_contents" > "$__build_cursors_gen_xcursors_svgcursors_output/$__build_cursors_gen_xcursors_cursor_name/metadata.json"
+	done
+
+	kcursorgen --svg-theme-to-xcursor --svg-dir "$__build_cursors_gen_xcursors_svgcursors_output" \
+		--xcursor-dir "$__build_cursors_gen_xcursors_xcursors_output" --sizes '24,32' --scales '1,2,3' 2>/dev/null
+	IFS="$LF"
+
+	IFS_rstr
+	cp -T "$SRC_DIR/volantes_cursors/cursor.theme" "$WORKING_BUILD_DIR/cursor.theme"
+}
+
+parse_args "$@" << FMT
+c:cached-theme:CACHED_THEME_FILE:string:$CACHED_THEME_FILE
+d:target-directory:OUTPUT_DIR:string:$OUTPUT_DIR
+f:force:FORCE_INSTALL:bool:false
+FMT
+
+case $? in
+    1)
+        print_help
         exit 0
-    fi
-
-    shopt -u nullglob
-
-    for line in "${CURSOR_COLORS[@]}"; do
-        IFS=: read -r color_code color_name cursor_name <<< "$line"
-
-        if [[ -z "${!color_name}" ]] || [[ "${!color_name}" == null ]]; then
-            continue
-        fi
-
-        sed -i "s/#$color_code/#%$color_name%/g" "$WORKING_CURSORS_DIR"/"$cursor_name"*
-    done
-
-    for line in "${CURSOR_COLORS[@]}"; do
-        IFS=: read -r color_code color_name cursor_name <<< "$line"
-
-        if [[ -z "${!color_name}" ]] || [[ "${!color_name}" == null ]]; then
-            continue
-        fi
-
-        sed -i "s/%${color_name}%/${!color_name}/g" "$WORKING_CURSORS_DIR"/"$cursor_name"*
-    done
-
-    echo "$json_output" > "$WORKING_DIR/build/theme.json"
-}
-
-install-cursors() {
-    set -e
-
-    cp -rdT "$WORKING_DIR/build" "$OUTPUT_DIR/$OUTPUT_NAME"
-}
-
-build-cursors() {
-    set -e
-    readarray -t svg_files < <(ls -m1 "$WORKING_CURSORS_DIR")
-    # cursors_items format: CURSOR_NAME:FRAMES:OVERRIDES
-    # FRAME format: HOTSPOT_X,HOTSPOT_Y,SIZE,FILENAME,[DELAY]
-    # FRAMES format: FRAME;FRAME;FRAME;[...]
-    local cursor_items=()
-
-    for svg_file in "${svg_files[@]}"; do
-        if [[ "$svg_file" != *.svg ]] || [[ "$svg_file" == *_24.svg ]]; then
-            continue
-        fi
-
-        # Trim '.svg' off of end
-        local cursor_name="${svg_file::-4}"
-
-        if [[ "$cursor_name" =~ -[[:digit:]]{2} ]]; then
-            # Skip parsing extra frames of animations
-            [[ "$cursor_name" == *"-01"* ]] || continue
-
-            # Trim '-01' off of end for animations
-            cursor_name="${cursor_name::-3}"
-        fi
-
-        local cursor_frames=() cursor_overrides=()
-
-        # Read cursor's config file
-        while IFS= read -r line; do
-            local hotspot_x= hotspot_y=
-            read -r size hotspot_x hotspot_y xcursor_filename delay <<< "$line"
-
-            if [[ "$size" != 32 ]]; then
-                continue
-            fi
-
-            # Animated cursors are made up of files with slightly different
-            # names between each other
-            local cursor_file="$svg_file"
-            cursor_frame="${xcursor_filename/_[0-9][0-9].png/}"
-
-            if [[ "$cursor_frame" != "$cursor_name" ]]; then
-                cursor_file="${cursor_frame}.svg"
-            fi
-            
-            local cursor_frame_item="${hotspot_x},${hotspot_y},${size},${cursor_file}"
-
-            if [[ -n "$delay" ]]; then
-                cursor_frame_item="${cursor_frame_item},${delay}"
-            fi
-
-            cursor_frames+=("$cursor_frame_item")
-        done < "$SRC_DIR/config/$cursor_name.cursor"
-
-        while read -r cursor_override _; do
-            if [[ -n "$cursor_override" ]]; then
-                cursor_overrides+=("$cursor_override")
-            fi
-        done < <(grep --color=never "${cursor_name}$" "$SRC_DIR/cursorList" 2>/dev/null)
-
-        IFS=';'
-        cursor_items+=("$cursor_name:${cursor_frames[*]}:${cursor_overrides[*]}")
-        unset IFS
-    done
-
-    gen-hyprcursors "${cursor_items[@]}" &
-    gen-xcursors "${cursor_items[@]}" &
-    wait
-}
-
-gen-hyprcursors() {
-    set -eo pipefail
-    echo -n "$HYPRCURSORS_MANIFEST_CONTENTS" > "$WORKING_DIR/manifest.hl"
-    local cursors_output="$WORKING_DIR/hyprcursors"
-    mkdir "$cursors_output"
-    
-    for cursor in "$@"; do
-        local cursor_name= cursor_frames= cursor_overrides= meta_hl_contents=()
-
-        IFS=':' read -r cursor_name cursor_frames cursor_overrides <<< "$cursor"
-
-        mkdir "$cursors_output/$cursor_name"
-
-        readarray -t -d ';' cursor_frames <<< "$cursor_frames"
-        readarray -t -d ';' cursor_overrides <<< "$cursor_overrides"
-
-        for cursor_frame in "${cursor_frames[@]}"; do
-            while IFS=',' read -r hotspot_x hotspot_y size filename delay; do
-                [[ -n "$filename" ]] || continue
-                # The cursor will be animated otherwise
-                [[ "$size" != 24 ]] || continue
-
-                if [[ -z "${meta_hl_contents[*]}" ]]; then
-                    meta_hl_contents+=("$(printf "hotspot_x = 0%s\nhotspot_y = 0%s" "$(bc <<< "scale=16; $hotspot_x / $size")" \
-                        "$(bc <<< "scale=16; $hotspot_y / $size")")" '')
-                fi
-
-                local meta_hl_frame="define_size = ${size}, ${filename}"
-                [[ -n "$delay" ]] && meta_hl_frame="${meta_hl_frame}, ${delay}"
-
-                ln -s "$WORKING_CURSORS_DIR/$filename" "$cursors_output/$cursor_name/$filename"
-                meta_hl_contents+=("$meta_hl_frame")
-            done <<< "$cursor_frame"
-        done
-
-        meta_hl_contents+=('')
-
-        for cursor_override in "${cursor_overrides[@]}"; do
-            # WHY DOES A LINE BREAK MAGICALLY APPEAR?????
-            [[ -n "${cursor_override::-1}" ]] || continue
-
-            meta_hl_contents+=("define_override = $cursor_override")
-        done
-
-        (IFS=$'\n'; printf '%s' "${meta_hl_contents[*]}" > "$cursors_output/$cursor_name/meta.hl")
-    done
-
-    hyprcursor-util --create "$WORKING_DIR" --output "$WORKING_DIR/build" 1>/dev/null
-    mv "$WORKING_DIR/build/theme_$OUTPUT_DISPLAY_NAME/"* "$WORKING_DIR/build"
-    rmdir "$WORKING_DIR/build/theme_$OUTPUT_DISPLAY_NAME"
-}
-
-gen-xcursors() {
-    set -eo pipefail
-    echo -n "$XCURSOR_INDEX_CONTENTS" > "$WORKING_DIR/build/index.theme"
-    local svgcursors_output="$WORKING_DIR/build/cursors_scalable"
-    local xcursors_output="$WORKING_DIR/build/cursors"
-    local overrides=()
-    mkdir "$svgcursors_output" "$xcursors_output"
-    
-    for cursor in "$@"; do
-        local cursor_name= cursor_frames= cursor_overrides= metadata_json_contents=('[')
-
-        IFS=':' read -r cursor_name cursor_frames cursor_overrides <<< "$cursor"
-
-        mkdir "$svgcursors_output/$cursor_name"
-
-        readarray -t -d ';' cursor_frames <<< "$cursor_frames"
-        readarray -t -d ';' cursor_overrides <<< "$cursor_overrides"
-
-        for cursor_frame_index in "${!cursor_frames[@]}"; do
-            while IFS=',' read -r hotspot_x hotspot_y size filename delay; do
-                [[ -n "$filename" ]] || continue
-                [[ -n "$delay" ]] && size="${size},"
-
-                metadata_json_contents+=(
-                    $'\t{'
-                    "${DOUBLE_TAB}\"filename\": \"$filename\","
-                    "${DOUBLE_TAB}\"hotspot_x\": $hotspot_x,"
-                    "${DOUBLE_TAB}\"hotspot_y\": $hotspot_y,"
-                    "${DOUBLE_TAB}\"nominal_size\": $size"
-                )
-                
-                [[ -n "$delay" ]] && metadata_json_contents+=("${DOUBLE_TAB}\"delay\": $delay")
-
-                if [[ -n "${cursor_frames[cursor_frame_index + 1]}" ]]; then
-                    metadata_json_contents+=($'\t},')
-                else
-                    metadata_json_contents+=($'\t}')
-                fi
-
-                cp "$WORKING_CURSORS_DIR/$filename" "$svgcursors_output/$cursor_name/$filename"
-            done <<< "${cursor_frames[cursor_frame_index]}"
-        done
-
-        metadata_json_contents+=(']')
-
-        for cursor_override in "${cursor_overrides[@]}"; do
-            # WHY DOES A LINE BREAK MAGICALLY APPEAR?????
-            [[ -n "${cursor_override::-1}" ]] || continue
-
-            overrides+=("${cursor_name}:${cursor_override}")
-        done
-
-        (IFS=$'\n'; printf '%s' "${metadata_json_contents[*]}" > "$svgcursors_output/$cursor_name/metadata.json")
-    done
-
-    kcursorgen --svg-theme-to-xcursor --svg-dir "$svgcursors_output" \
-    --xcursor-dir "$xcursors_output" --sizes '24,32' --scales '1,2,3' 2>/dev/null
-
-    for override in "${overrides[@]}"; do
-        IFS=':' read -r target link_name <<< "$override"
-
-        if [[ ! -f "$xcursors_output/$link_name" ]]; then
-            ln -s "$target" "$xcursors_output/$link_name"
-        fi
-    done
-
-    cp "$SRC_DIR/volantes_cursors/cursor.theme" "$WORKING_DIR/build"
-}
-
-parse-flags() {
-    local flags="$1"
-    local value="$2"
-    local flags_count=$(( ${#flags} - 1 ))
-
-    for (( i=1; i < ${#flags}; i++)); do
-        # Get the current letter
-        local arg="${flags:$i:1}"
-
-        case "$arg" in
-            h)
-                print-help
-                exit 0
-                ;;
-            c)
-                CACHED_THEME_FILE="$value"
-                ;;
-            d)
-                OUTPUT_DIR="$value"
-                ;;
-            *)
-                printf "error: invalid parameter '-%s'\n%s\n" \
-                "$arg" "$(print-help)" 1>&2
-
-                exit 2
-                ;;
-        esac
-    done
-}
-
-while (( $# > 0 )); do
-    case "$1" in
-        --help)
-            parse-flags '-h'
-            ;;
-        --cached-theme)
-            parse-flags '-c' "$2"
-            shift
-            ;;
-        --target-directory)
-            parse-flags '-d' "$2"
-            shift
-            ;;
-        --*)
-            printf "error: invalid parameter '%s'\n%s\n" "$1" "$(print-help)" 1>&2
-            exit 2
-            ;;
-        -*)
-            parse-flags "$1" "$2"
-
-            case "$1" in
-                *c*|*d*)
-                    shift
-                    ;;
-            esac
-            ;;
-        *)
-            printf "error: invalid parameter '%s'\n%s\n" "$1" "$(print-help)" 1>&2
-            exit 2
-    esac
-
-    shift
-done
-
-trap cleanup EXIT
+        ;;
+    2)
+        print_help 1>&2
+        exit 1
+        ;;
+    [!0]*)
+        exit 4
+        ;;
+esac
 
 set -e
 
-if [[ -d "$WORKING_DIR" ]]; then
-    ([[ "$WORKING_DIR" != '/' ]] && rm -r "$WORKING_DIR"/*) || \
-        (echo "error: no, I will not 'rm' recursively on root" 1>&2 || exit 4)
-else
-    mkdir "$WORKING_DIR" 
-fi
+WORKING_DIR="$(mktemp -d)"
+WORKING_BUILD_DIR="$WORKING_DIR/build"
+WORKING_CURSORS_DIR="$WORKING_DIR/cursors"
+trap cleanup EXIT
+trap 'err=$?; cleanup; exit $?' TERM INT QUIT
 
-mkdir "$WORKING_DIR/build" "$WORKING_CURSORS_DIR"
-shopt -s extglob nullglob
-cp -d -t "$WORKING_CURSORS_DIR" "$SRC_DIR/volantes_cursors"/!(*_24.svg|*.theme)
-shopt -u extglob nullglob
+mkdir "$WORKING_BUILD_DIR" "$WORKING_CURSORS_DIR"
+cp -dt "$WORKING_CURSORS_DIR" "$SRC_DIR/volantes_cursors"/*.svg
 
-inject-colors || :
-build-cursors
-install-cursors
+inject_colors || :
+build_cursors
+install_cursors
